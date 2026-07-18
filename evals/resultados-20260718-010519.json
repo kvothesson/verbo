@@ -1,0 +1,116 @@
+{
+  "groq/llama-3.3-70b-versatile": [
+    {
+      "tarea": "01-crear-script",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "01-crear-script",
+          "paso": true,
+          "segundos": 8.5,
+          "llamadas": 3,
+          "tokens": 2650,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "02-bug-promedio",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "02-bug-promedio",
+          "paso": true,
+          "segundos": 9.4,
+          "llamadas": 4,
+          "tokens": 4951,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "03-fizzbuzz",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "03-fizzbuzz",
+          "paso": true,
+          "segundos": 6.4,
+          "llamadas": 2,
+          "tokens": 2125,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "04-refactor",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "04-refactor",
+          "paso": true,
+          "segundos": 8.6,
+          "llamadas": 4,
+          "tokens": 5441,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "05-csv-filtrado",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "05-csv-filtrado",
+          "paso": false,
+          "segundos": 7.2,
+          "llamadas": 3,
+          "tokens": 3849,
+          "detalle": "~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"D:\\dev\\python\\3.13.1\\Lib\\pathlib\\_abc.py\", line 633, in read_text\n    return f.read()\n           ~~~~~~^^\n  File \"<frozen codecs>\", line 325, in decode\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"
+        }
+      ]
+    },
+    {
+      "tarea": "06-test-rojo",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "06-test-rojo",
+          "paso": true,
+          "segundos": 7.9,
+          "llamadas": 4,
+          "tokens": 5907,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "07-codebase-bug",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "07-codebase-bug",
+          "paso": false,
+          "segundos": 7.2,
+          "llamadas": 2,
+          "tokens": 2266,
+          "detalle": "ecent call last):\n  File \"D:\\repos\\blank\\verbo\\evals\\tareas\\07-codebase-bug\\verificar.py\", line 11, in <module>\n    assert reportes.agotados(repo) == [\"a\", \"c\"], f\"agotados incorrecto: {reportes.agotados(repo)}\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: agotados incorrecto: []"
+        }
+      ]
+    },
+    {
+      "tarea": "08-tdd-carrito",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "08-tdd-carrito",
+          "paso": false,
+          "segundos": 300.0,
+          "llamadas": 0,
+          "tokens": 0,
+          "detalle": "[timeout del agente]"
+        }
+      ]
+    }
+  ]
+}

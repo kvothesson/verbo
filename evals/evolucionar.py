@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-Auto-iteración de VERBO: el agente mejora su propio código usando la suite
-de evals como juez.
+Auto-iteración de VERBO: el agente mejora su propio código, con la suite
+de evals como juez y git como red de seguridad.
+
+El mutador ES el propio VERBO: se lanza una instancia del agente sobre su
+propio repositorio con la instrucción de leer verbo.py y aplicar una mejora
+mínima usando sus herramientas (leer/editar). Esto es mucho más robusto que
+pedir parches "a ciegas" a un modelo: el agente ve el texto exacto del código.
 
 Loop por iteración:
   1. correr la suite (baseline)
-  2. un modelo mutador lee verbo.py + el reporte de fallas y propone
-     una mejora mínima (ediciones exactas estilo buscar/reemplazar)
-  3. aplicar, chequear sintaxis
+  2. VERBO se auto-edita guiado por el reporte de fallas
+  3. guardrails: solo verbo.py puede cambiar + py_compile
   4. correr la suite de nuevo (candidato)
   5. si el fitness mejora -> git commit; si no -> git checkout (revert)
 
 Fitness: primero aciertos, después frugalidad de tokens (-10% o más).
 
 Guardrails:
-  - Solo se modifica verbo.py; evals/ es intocable (nadie corrige su propio examen)
+  - si el mutador toca cualquier archivo que no sea verbo.py, se revierte TODO
   - py_compile antes de gastar tokens en evaluar un candidato roto
-  - git como memoria: cada mejora aceptada es un commit, cada regresión se revierte
-  - máximo de iteraciones explícito; sin loop infinito
+  - cada mejora aceptada es un commit; cada regresión se revierte
+  - iteraciones acotadas; sin loop infinito
 
 Uso:
     python evolucionar.py --iteraciones 1 -r 1
@@ -26,10 +30,8 @@ Uso:
 """
 import argparse
 import json
-import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 try:
@@ -41,16 +43,16 @@ AQUI = Path(__file__).parent
 REPO = AQUI.parent
 ARCHIVO_VERBO = REPO / "verbo.py"
 
-sys.path.insert(0, str(REPO))
-import verbo  # reutilizamos PROVEEDORES y cargar_env del propio agente
-
-from openai import OpenAI
-
 
 def git(*args, check=True):
     return subprocess.run(["git", "-C", str(REPO), *args],
                           capture_output=True, text=True, check=check,
                           encoding="utf-8", errors="replace")
+
+
+def archivos_sin_trackear():
+    return {l[3:].strip() for l in git("status", "--porcelain").stdout.splitlines()
+            if l.startswith("??")}
 
 
 def correr_suite(modelo_agente, reps, pausa):
@@ -74,67 +76,35 @@ def correr_suite(modelo_agente, reps, pausa):
     }
 
 
-def pedir_mutacion(client, modelo_mutador, fuente, base, feedback=None):
-    reporte = (f"aciertos: {base['aciertos']}/{base['total']} · "
-               f"tokens totales: {base['tokens']}\n")
+def mutar_con_verbo(modelo_mutador, base):
+    """VERBO se edita a sí mismo guiado por el reporte de la suite."""
+    reporte = f"aciertos: {base['aciertos']}/{base['total']} · tokens totales: {base['tokens']}\n"
     if base["fallas"]:
-        reporte += "FALLAS:\n" + "\n".join(
+        reporte += "FALLAS OBSERVADAS:\n" + "\n".join(
             f"- [{f['tarea']}] {f['detalle']}" for f in base["fallas"])
     else:
-        reporte += "Sin fallas: el objetivo es reducir tokens/llamadas sin romper nada."
+        reporte += "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
 
-    instrucciones = (
-        "Sos un ingeniero de agentes LLM. Este es el código completo de un coding "
-        "agent minimalista (verbo.py) y el reporte de su suite de evaluación.\n"
-        "Proponé UNA mejora mínima y segura al código que suba el pass rate "
-        "(o, si no hay fallas, que reduzca el consumo de tokens). Puede ser al "
-        "prompt de sistema, al manejo de errores, al loop, o a las herramientas.\n"
-        "Reglas estrictas:\n"
-        "- Máximo 3 ediciones de tipo buscar/reemplazar con texto EXACTO y único\n"
-        "- Las ediciones se aplican sobre el TEXTO FUENTE del archivo .py tal cual: "
-        "dentro de los strings del código los saltos de línea son \\n literales "
-        "(dos caracteres), copialos exactamente así\n"
-        "- No agregar dependencias nuevas ni cambiar la interfaz de línea de comandos\n"
-        "- Cambios conservadores: mejor una mejora chica que un rediseño\n"
-        "Respondé SOLO con un JSON válido con esta forma:\n"
-        '{"razon": "una línea explicando la mejora", '
-        '"ediciones": [{"buscar": "texto exacto actual", "reemplazar": "texto nuevo"}]}'
+    prompt = (
+        "Estás mejorando TU PROPIO código fuente: el archivo verbo.py de este directorio "
+        "es el agente que sos vos. Este es el reporte de tu última evaluación:\n\n"
+        f"{reporte}\n\n"
+        "Leé verbo.py y aplicá UNA mejora mínima y conservadora que ataque la causa "
+        "de las fallas (o que reduzca consumo de tokens si no hay fallas). Típicamente: "
+        "una regla nueva en el prompt de sistema, o un manejo de error más robusto.\n"
+        "Reglas estrictas: usá la herramienta editar (no reescribas el archivo entero); "
+        "NO toques ningún otro archivo; NO cambies la interfaz de línea de comandos; "
+        "NO agregues dependencias. Al final explicá la mejora en una línea."
     )
-    mensajes = [
-        {"role": "system", "content": instrucciones},
-        {"role": "user", "content": f"REPORTE:\n{reporte}\n\nCODIGO:\n{fuente}"},
-    ]
-    if feedback:
-        mensajes.append({"role": "user", "content": f"Tu intento anterior falló: {feedback}"})
-    r = client.chat.completions.create(
-        model=modelo_mutador, temperature=0.4, messages=mensajes)
-    texto = r.choices[0].message.content or ""
-    m = re.search(r"\{.*\}", texto, re.DOTALL)
-    if not m:
-        return None
-    try:
-        mut = json.loads(m.group(0))
-        assert isinstance(mut.get("ediciones"), list) and mut["ediciones"]
-        return mut
-    except (json.JSONDecodeError, AssertionError):
-        return None
-
-
-def aplicar(fuente, ediciones):
-    for ed in ediciones[:3]:
-        buscar = ed.get("buscar", "")
-        reemplazar = ed.get("reemplazar", "")
-        # el mutador suele confundir \n reales con los \n literales de los strings
-        variantes = [(buscar, reemplazar)]
-        if "\n" in buscar:
-            variantes.append((buscar.replace("\n", "\\n"), reemplazar.replace("\n", "\\n")))
-        if buscar.endswith("\n"):
-            variantes.append((buscar.rstrip("\n"), reemplazar.rstrip("\n")))
-        elegido = next(((b, r) for b, r in variantes if b and fuente.count(b) == 1), None)
-        if elegido is None:
-            return None, f"edición no aplicable (apariciones={fuente.count(buscar)}): {buscar[:80]!r}"
-        fuente = fuente.replace(elegido[0], elegido[1], 1)
-    return fuente, None
+    r = subprocess.run(
+        [sys.executable, str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador, "-p", prompt],
+        cwd=REPO, capture_output=True, text=True, timeout=600,
+        encoding="utf-8", errors="replace")
+    salida = (r.stdout or "").strip()
+    print("  --- mutador ---")
+    print("  " + "\n  ".join(salida.splitlines()[-8:]))
+    lineas = [l for l in salida.splitlines() if l.strip() and not l.startswith(("[verbo-stats]", "  →", "VERBO ·"))]
+    return lineas[-1][:100] if lineas else "mejora automática"
 
 
 def compila():
@@ -149,58 +119,50 @@ def es_mejor(cand, base):
     return cand["tokens"] < base["tokens"] * 0.9
 
 
+def revertir(nuevos_untracked):
+    git("checkout", "--", ".")
+    for f in nuevos_untracked:
+        if not f.startswith("evals/resultados-"):
+            (REPO / f).unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--iteraciones", type=int, default=1)
     parser.add_argument("--modelo-agente", default=None,
                         help="Modelo que usa VERBO en los evals (default: el de verbo.py)")
     parser.add_argument("--modelo-mutador", default="groq/openai/gpt-oss-120b",
-                        help="Modelo que propone las mejoras al código")
+                        help="Modelo con el que VERBO se auto-edita")
     parser.add_argument("-r", "--repeticiones", type=int, default=1)
     parser.add_argument("--pausa", type=int, default=15)
     args = parser.parse_args()
 
-    if git("status", "--porcelain").stdout.strip():
-        raise SystemExit("el repo tiene cambios sin commitear; commiteá o revertí antes de evolucionar")
-
-    verbo.cargar_env()
-    partes = args.modelo_mutador.split("/", 1)
-    prov = verbo.PROVEEDORES[partes[0]]
-    import os
-    client = OpenAI(base_url=prov["base_url"],
-                    api_key=os.environ.get(prov["key_env"] or "", "sin-key"))
-    modelo_mutador = partes[1]
+    sucios = [l for l in git("status", "--porcelain").stdout.splitlines()
+              if not l[3:].strip().startswith("evals/resultados-")]
+    if sucios:
+        raise SystemExit(f"el repo tiene cambios sin commitear: {sucios}")
 
     print(f"[evolucion] baseline con agente={args.modelo_agente or '(default)'}")
     base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
     print(f"[evolucion] baseline: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
 
     for i in range(1, args.iteraciones + 1):
-        print(f"\n[evolucion] iteración {i}: pidiendo mutación a {args.modelo_mutador}")
-        fuente = ARCHIVO_VERBO.read_text(encoding="utf-8")
-        nueva, feedback = None, None
-        for intento in range(2):
-            mut = pedir_mutacion(client, modelo_mutador, fuente, base, feedback)
-            if not mut:
-                feedback = "tu respuesta no fue un JSON válido con al menos una edición"
-                continue
-            print(f"[evolucion] propuesta: {mut.get('razon', '(sin razón)')}")
-            nueva, err = aplicar(fuente, mut["ediciones"])
-            if not err:
-                break
-            print(f"[evolucion] {err}")
-            feedback = (f"tus ediciones no aplicaron: {err}. Copiá el texto EXACTO del "
-                        "código fuente (los \\n dentro de strings son literales).")
-            nueva = None
-        if nueva is None:
-            print("[evolucion] sin mutación aplicable; salto iteración")
+        print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {args.modelo_mutador}")
+        untracked_antes = archivos_sin_trackear()
+        razon = mutar_con_verbo(args.modelo_mutador, base)
+        nuevos = archivos_sin_trackear() - untracked_antes
+
+        cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
+        if cambiados != ["verbo.py"] or any(not f.startswith("evals/resultados-") for f in nuevos):
+            print(f"[evolucion] el mutador tocó archivos prohibidos (diff={cambiados}, "
+                  f"nuevos={sorted(nuevos)}); revert total")
+            revertir(nuevos)
             continue
-        ARCHIVO_VERBO.write_text(nueva, encoding="utf-8")
 
         ok, err_compilacion = compila()
         if not ok:
             print(f"[evolucion] el candidato no compila; revert. {err_compilacion.strip()[:200]}")
-            git("checkout", "--", "verbo.py")
+            revertir(nuevos)
             continue
 
         print("[evolucion] evaluando candidato...")
@@ -211,7 +173,7 @@ def main():
         if es_mejor(cand, base):
             git("add", "verbo.py")
             git("commit", "-m",
-                f"auto-iteración: {mut.get('razon', 'mejora')}\n\n"
+                f"auto-iteración: {razon}\n\n"
                 f"Fitness: {base['aciertos']}/{base['total']} ({base['tokens']} tok) -> "
                 f"{cand['aciertos']}/{cand['total']} ({cand['tokens']} tok)\n\n"
                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
