@@ -106,6 +106,13 @@ HERRAMIENTAS = [
         "parameters": {"type": "object", "properties": {
             "comando": {"type": "string"}},
             "required": ["comando"]}}},
+    {"type": "function", "function": {
+        "name": "buscar",
+        "description": "Busca texto literal en los archivos del directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+        "parameters": {"type": "object", "properties": {
+            "texto": {"type": "string"},
+            "extension": {"type": "string", "description": "Opcional: filtrar por extensión, ej '.py'"}},
+            "required": ["texto"]}}},
 ]
 
 
@@ -125,7 +132,7 @@ def prompt_sistema():
         "Sos VERBO, un agente de código que corre en la terminal del usuario. "
         f"Sistema operativo: {platform.system()} {platform.release()}. "
         f"Directorio de trabajo: {os.getcwd()}\n"
-        "Tenés herramientas para leer, escribir y editar archivos, y ejecutar comandos de shell. "
+        "Tenés herramientas para leer, escribir, editar y buscar en archivos, y ejecutar comandos de shell. "
         "Usalas para completar la tarea de punta a punta: no describas lo que harías, hacelo.\n"
         "Reglas:\n"
         "1. Antes de modificar un archivo existente, leelo.\n"
@@ -133,7 +140,9 @@ def prompt_sistema():
         "3. Si un comando falla, leé el error y corregí. No repitas el mismo comando esperando otro resultado.\n"
         "4. Verificá tu trabajo ejecutándolo cuando sea posible.\n"
         "5. Respondé siempre en español, breve y directo. Al terminar, resumí qué hiciste en una o dos líneas.\n"
-        "6. Sé frugal con los tokens: no imprimas archivos enteros en tus respuestas ni repitas contenido que ya está en el historial."
+        "6. Sé frugal con los tokens: no imprimas archivos enteros en tus respuestas ni repitas contenido que ya está en el historial.\n"
+        "7. Para crear o modificar archivos usá siempre 'escribir' o 'editar', nunca redirecciones de shell (> o >>): en Windows generan encodings rotos.\n"
+        "8. Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado."
     )
 
 
@@ -173,6 +182,30 @@ def ejecutar_herramienta(nombre, args, auto):
                 return f"ERROR: el texto aparece {ocurrencias} veces. Agregá más contexto para que sea único."
             ruta.write_text(contenido.replace(args["buscar"], args["reemplazar"], 1), encoding="utf-8")
             return f"OK: editado {ruta}"
+
+        if nombre == "buscar":
+            texto = args["texto"]
+            ext = args.get("extension") or ""
+            coincidencias = []
+            for archivo in sorted(Path(".").rglob("*")):
+                if set(archivo.parts) & {".git", "__pycache__", "node_modules", ".venv", "venv"}:
+                    continue
+                if not archivo.is_file() or (ext and archivo.suffix != ext):
+                    continue
+                try:
+                    if archivo.stat().st_size > 1_000_000:
+                        continue
+                    for i, linea in enumerate(
+                            archivo.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                        if texto in linea:
+                            coincidencias.append(f"{archivo}:{i}: {linea.strip()[:120]}")
+                            if len(coincidencias) >= 50:
+                                break
+                except OSError:
+                    continue
+                if len(coincidencias) >= 50:
+                    break
+            return truncar("\n".join(coincidencias) or "(sin coincidencias)")
 
         if nombre == "ejecutar":
             comando = args["comando"]
@@ -259,7 +292,7 @@ def turno(client, modelo, mensajes, auto):
                 args = json.loads(tc.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
-            detalle = args.get("comando") or args.get("ruta") or ""
+            detalle = args.get("comando") or args.get("ruta") or args.get("texto") or ""
             print(f"  → {tc.function.name}: {detalle}")
             resultado = ejecutar_herramienta(tc.function.name, args, auto)
             mensajes.append({"role": "tool", "tool_call_id": tc.id, "content": resultado})

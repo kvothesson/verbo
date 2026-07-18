@@ -1,0 +1,40 @@
+name: evolucion-diaria
+
+# VERBO evoluciona solo, en la nube, aunque ninguna compu esté prendida.
+# Cada día: baseline -> auto-edición -> re-evaluación -> commit si mejora.
+# Correr a mano: pestaña Actions -> evolucion-diaria -> Run workflow.
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 10:00 Argentina (UTC-3)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  evolucionar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: dependencias
+        run: pip install openai
+
+      - name: identidad de la evolución
+        run: |
+          git config user.name "Kvothesson"
+          git config user.email "kvothesson@users.noreply.github.com"
+
+      - name: evolucionar (1 iteración diaria)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python evals/evolucionar.py --iteraciones 1 -r 1 --pausa 20
+
+      - name: pushear mejoras aceptadas
+        run: git push

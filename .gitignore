@@ -2,3 +2,5 @@
 *.env
 __pycache__/
 *.pyc
+evals/evolucion.log
+evals/evolucion_errores.log

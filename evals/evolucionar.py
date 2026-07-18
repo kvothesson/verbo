@@ -42,6 +42,26 @@ except Exception:
 AQUI = Path(__file__).parent
 REPO = AQUI.parent
 ARCHIVO_VERBO = REPO / "verbo.py"
+LOG = AQUI / "evolucion.log"
+
+
+class Tee:
+    """Duplica stdout al log para que el progreso sea visible desde afuera."""
+
+    def __init__(self, pantalla, archivo):
+        self.pantalla, self.archivo = pantalla, archivo
+
+    def write(self, s):
+        self.pantalla.write(s)
+        self.archivo.write(s)
+        self.archivo.flush()
+
+    def flush(self):
+        self.pantalla.flush()
+        self.archivo.flush()
+
+
+sys.stdout = Tee(sys.stdout, open(LOG, "a", encoding="utf-8", errors="replace"))
 
 
 def git(*args, check=True):
@@ -59,9 +79,10 @@ def correr_suite(modelo_agente, reps, pausa):
     cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps), "--pausa", str(pausa)]
     if modelo_agente:
         cmd += ["-m", modelo_agente]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                       encoding="utf-8", errors="replace")
-    print(r.stdout)
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, encoding="utf-8", errors="replace", bufsize=1) as p:
+        for linea in p.stdout:
+            print("  " + linea.rstrip())
     archivos = sorted(AQUI.glob("resultados-*.json"))
     if not archivos:
         raise SystemExit("la suite no generó resultados")
@@ -138,10 +159,13 @@ def main():
     args = parser.parse_args()
 
     sucios = [l for l in git("status", "--porcelain").stdout.splitlines()
-              if not l[3:].strip().startswith("evals/resultados-")]
+              if not l[3:].strip().startswith(("evals/resultados-", "evals/evolucion.log"))]
     if sucios:
         raise SystemExit(f"el repo tiene cambios sin commitear: {sucios}")
 
+    from datetime import datetime
+    print(f"\n===== evolución {datetime.now():%Y-%m-%d %H:%M:%S} · "
+          f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} =====")
     print(f"[evolucion] baseline con agente={args.modelo_agente or '(default)'}")
     base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
     print(f"[evolucion] baseline: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
