@@ -186,7 +186,21 @@ def ejecutar_herramienta(nombre, args, auto):
                 return "ERROR: el texto a buscar no aparece en el archivo. Leé el archivo y usá el texto exacto."
             if ocurrencias > 1:
                 return f"ERROR: el texto aparece {ocurrencias} veces. Agregá más contexto para que sea único."
-            ruta.write_text(contenido.replace(args["buscar"], args["reemplazar"], 1), encoding="utf-8")
+            nuevo = contenido.replace(args["buscar"], args["reemplazar"], 1)
+            # Guardrail: si el archivo compilaba y la edición lo rompe, rechazarla.
+            # (Si ya estaba roto no se bloquea: el modelo puede estar reparándolo.)
+            if ruta.suffix == ".py":
+                def _compila(texto):
+                    try:
+                        compile(texto, str(ruta), "exec")
+                        return None
+                    except SyntaxError as e:
+                        return e
+                if _compila(contenido) is None and (e := _compila(nuevo)):
+                    return (f"ERROR: esta edición rompería la sintaxis de Python "
+                            f"(línea {e.lineno}: {e.msg}). NO se aplicó. "
+                            "Revisá comillas, paréntesis y escapes, y reintentá.")
+            ruta.write_text(nuevo, encoding="utf-8")
             print(f"    - buscar:     {args['buscar'][:200]!r}")
             print(f"    - reemplazar: {args['reemplazar'][:200]!r}")
             return f"OK: editado {ruta}"

@@ -115,7 +115,9 @@ def mutar_con_verbo(modelo_mutador, base):
         "una regla nueva en el prompt de sistema, o un manejo de error más robusto.\n"
         "Reglas estrictas: usá la herramienta editar (no reescribas el archivo entero); "
         "NO toques ningún otro archivo; NO cambies la interfaz de línea de comandos; "
-        "NO agregues dependencias. Al final explicá la mejora en una línea."
+        "NO agregues dependencias. La herramienta editar valida la sintaxis de Python "
+        "automáticamente: si te devuelve error, tu edición no se aplicó — corregila y "
+        "reintentá hasta que aplique. Al final explicá la mejora en una línea."
     )
     r = subprocess.run(
         [sys.executable, str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador, "-p", prompt],
