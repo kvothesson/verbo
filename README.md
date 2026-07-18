@@ -55,7 +55,7 @@ python verbo.py
 # Elegir modelo/proveedor (formato: proveedor/modelo)
 python verbo.py -m groq/llama-3.3-70b-versatile -p "..."
 python verbo.py -m gemini/gemini-2.5-flash -p "..."
-python verbo.py -m openrouter/deepseek/deepseek-chat-v3-0324:free -p "..."
+python verbo.py -m openrouter/openai/gpt-oss-20b:free -p "..."
 python verbo.py -m ollama/qwen2.5-coder:7b -p "..."
 
 # Sin confirmación antes de cada comando (más fluido, más riesgo)

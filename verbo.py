@@ -49,7 +49,7 @@ PROVEEDORES = {
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "key_env": "OPENROUTER_API_KEY",
-        "default": "deepseek/deepseek-chat-v3-0324:free",
+        "default": "openai/gpt-oss-20b:free",
         "key_url": "https://openrouter.ai/settings/keys",
     },
     "gemini": {
@@ -77,7 +77,8 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0}
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
 FALLBACKS_DEFAULT = ("groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
-                     "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b")
+                     "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b,"
+                     "openrouter/openai/gpt-oss-20b:free")
 CLIENTES = {}
 
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
