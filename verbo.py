@@ -46,6 +46,12 @@ PROVEEDORES = {
         "default": "openai/gpt-oss-120b",
         "key_url": "https://console.groq.com/keys",
     },
+    "cerebras": {
+        "base_url": "https://api.cerebras.ai/v1",
+        "key_env": "CEREBRAS_API_KEY",
+        "default": "gpt-oss-120b",
+        "key_url": "https://cloud.cerebras.ai (1M tokens/día gratis, sin tarjeta)",
+    },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "key_env": "OPENROUTER_API_KEY",
@@ -76,7 +82,10 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0, "por_modelo": {}}
 
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
-FALLBACKS_DEFAULT = ("groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
+# Cerebras va primero porque sirve el MISMO gpt-oss-120b del primario:
+# presupuesto extra (1M tokens/día) sin perder nada de calidad.
+FALLBACKS_DEFAULT = ("cerebras/gpt-oss-120b,"
+                     "groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
                      "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b,"
                      "openrouter/openai/gpt-oss-20b:free")
 CLIENTES = {}
@@ -323,6 +332,17 @@ def llamar_con_reintentos(estado, mensajes):
                 ENFRIAMIENTOS[modelo_completo] = time.time() + espera
                 print(f"  [límite de tasa en {modelo_completo}; "
                       f"se enfría {espera:.0f}s, probando el siguiente]")
+            except BadRequestError as e:
+                # Contexto más grande que la ventana del modelo (p. ej. el cap
+                # del tier gratis de Cerebras): este modelo no sirve para esta
+                # conversación, pero el resto de la cadena puede seguir.
+                if any(s in str(e).lower() for s in
+                       ("context_length", "maximum context", "reduce the length")):
+                    ENFRIAMIENTOS[modelo_completo] = time.time() + 600
+                    print(f"  [contexto excede la ventana de {modelo_completo}; "
+                          "probando el siguiente]")
+                    continue
+                raise
         # Ningún modelo disponible ahora: esperar al que se libere antes.
         proximo = min((ENFRIAMIENTOS.get(m, 0) for m in estado["modelos"]),
                       default=float("inf")) - time.time()
