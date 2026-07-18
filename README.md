@@ -66,7 +66,10 @@ python verbo.py --auto -p "..."
 
 - **leer** archivos · **escribir** archivos · **editar** (reemplazo quirúrgico) · **ejecutar** comandos
 - Loop agéntico: intenta, ve el error, corrige, verifica — hasta 20 iteraciones por pedido
-- Manejo de rate limits: si el tier gratis lo frena, espera y reintenta solo
+- Manejo de rate limits: cada 429 enfría solo ese modelo por el tiempo exacto
+  que informa el error y sigue con el resto de la cadena; cuando el cupo del
+  modelo más capaz se renueva, recupera la prioridad automáticamente (los
+  límites de Groq son por modelo: la cadena multiplica el presupuesto gratis)
 - Auto-corrección: si el modelo alucina una herramienta inexistente, se lo señala y sigue
 - Compactación de contexto: descarta resultados viejos para no explotar los límites
 

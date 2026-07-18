@@ -72,7 +72,7 @@ PROVEEDORES = {
     },
 }
 
-ESTADISTICAS = {"llamadas": 0, "tokens": 0}
+ESTADISTICAS = {"llamadas": 0, "tokens": 0, "por_modelo": {}}
 
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
@@ -80,6 +80,8 @@ FALLBACKS_DEFAULT = ("groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
                      "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b,"
                      "openrouter/openai/gpt-oss-20b:free")
 CLIENTES = {}
+ENFRIAMIENTOS = {}  # modelo -> timestamp hasta el cual no volver a intentarlo
+MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
 
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
 MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
@@ -280,37 +282,57 @@ def cliente_para(modelo_completo):
     return par
 
 
+def _segundos_de_espera(texto_error):
+    """Extrae cuánto pide esperar un 429 (formatos '7.66s', '2m59s', '1h5m')."""
+    m = re.search(r"try again in ([0-9hms.]+)", texto_error)
+    if not m:
+        return 60.0
+    total = 0.0
+    for valor, unidad in re.findall(r"([0-9.]+)(h|m|s)", m.group(1)):
+        total += float(valor) * {"h": 3600, "m": 60, "s": 1}[unidad]
+    return total or 60.0
+
+
 def llamar_con_reintentos(estado, mensajes):
-    """Intenta con el modelo actual; si agota los reintentos por rate limit,
-    cae en cascada al siguiente modelo de la lista (presupuestos separados)."""
-    while estado["idx"] < len(estado["modelos"]):
-        par = cliente_para(estado["modelos"][estado["idx"]])
-        if par is None:
-            estado["idx"] += 1
-            continue
-        client, modelo = par
-        # Groq en free tier suele devolver 429 casi instantáneo (sin cupo,
-        # no por ráfaga): insistir mucho en el mismo modelo quema el presupuesto
-        # de tiempo del proceso. Mejor fallar rápido (2 intentos) y probar el
-        # siguiente modelo de la cadena, que tiene presupuesto propio intacto.
-        for intento in range(2):
+    """Prueba los modelos en orden de preferencia, salteando los que están en
+    enfriamiento por rate limit. Cada 429 registra hasta cuándo ese modelo está
+    agotado (usando el tiempo que informa el propio error), así no se duerme a
+    ciegas y —clave para la calidad— el modelo más capaz recupera la prioridad
+    apenas su cupo se renueva, en vez de quedar degradado el resto de la sesión."""
+    while True:
+        ahora = time.time()
+        for modelo_completo in estado["modelos"]:
+            if ENFRIAMIENTOS.get(modelo_completo, 0) > ahora:
+                continue
+            par = cliente_para(modelo_completo)
+            if par is None:
+                ENFRIAMIENTOS[modelo_completo] = float("inf")  # sin key: no insistir
+                continue
+            client, modelo = par
             try:
                 respuesta = client.chat.completions.create(
                     model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
                 ESTADISTICAS["llamadas"] += 1
+                ESTADISTICAS["por_modelo"][modelo_completo] = \
+                    ESTADISTICAS["por_modelo"].get(modelo_completo, 0) + 1
                 if respuesta.usage:
                     ESTADISTICAS["tokens"] += respuesta.usage.total_tokens or 0
                 return respuesta
             except RateLimitError as e:
-                m = re.search(r"try again in ([0-9.]+)s", str(e))
-                espera = min(30.0, float(m.group(1)) + 1) if m else 10.0 * (intento + 1)
-                print(f"  [límite de tasa en {modelo}; esperando {espera:.0f}s...]")
-                time.sleep(espera)
-        estado["idx"] += 1
-        if estado["idx"] < len(estado["modelos"]):
-            print(f"  [rate limit persistente; fallback a {estado['modelos'][estado['idx']]}]")
-    raise SystemExit("ERROR: todos los modelos de la cadena agotaron su límite de tasa. "
-                     "Esperá unos minutos o agregá otro proveedor con --fallback.")
+                espera = _segundos_de_espera(str(e))
+                ENFRIAMIENTOS[modelo_completo] = time.time() + espera
+                print(f"  [límite de tasa en {modelo_completo}; "
+                      f"se enfría {espera:.0f}s, probando el siguiente]")
+        # Ningún modelo disponible ahora: esperar al que se libere antes.
+        proximo = min((ENFRIAMIENTOS.get(m, 0) for m in estado["modelos"]),
+                      default=float("inf")) - time.time()
+        if proximo > MAX_ESPERA_GLOBAL:
+            raise SystemExit("ERROR: todos los modelos de la cadena agotaron su límite "
+                             f"de tasa y el próximo cupo tarda {proximo / 60:.0f} min. "
+                             "Esperá o agregá otro proveedor con --fallback.")
+        espera = max(proximo, 2.0)
+        print(f"  [toda la cadena enfriándose; esperando {espera:.0f}s al primer cupo]")
+        time.sleep(espera)
 
 
 def turno(estado, mensajes, auto):
@@ -385,7 +407,7 @@ def main():
 
     cadena = [args.modelo] + [m.strip() for m in args.fallback.split(",")
                               if m.strip() and m.strip() != args.modelo]
-    estado = {"modelos": cadena, "idx": 0}
+    estado = {"modelos": cadena}
     par = cliente_para(args.modelo)
     modelo = par[1] if par else args.modelo
     mensajes = [{"role": "system", "content": prompt_sistema()}]
@@ -396,8 +418,10 @@ def main():
         inicio = time.time()
         mensajes.append({"role": "user", "content": args.prompt})
         turno(estado, mensajes, args.auto)
+        reparto = " ".join(f"{m}:{n}" for m, n in ESTADISTICAS["por_modelo"].items())
         print(f"[verbo-stats] llamadas={ESTADISTICAS['llamadas']} "
-              f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f}")
+              f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f} "
+              f"modelos=({reparto})")
         return
 
     print("Modo interactivo. Escribí tu pedido ('salir' para terminar).\n")
