@@ -38,6 +38,25 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 07 | codebase-bug | Bug enterrado en una codebase de 4 archivos: solo se da el síntoma, el agente debe navegar el código y localizarlo |
 | 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
 | 09 | casos-borde | Spec con reglas de validación no obvias (tipos, negativos, cero vs ausente). Una implementación que solo cubre el camino feliz revienta en producción — verificado: una solución ingenua da TypeError en el caso de tipo incorrecto |
+| 10-14 | humaneval-* | 5 problemas de [HumanEval](https://github.com/openai/human-eval) (OpenAI, MIT), no inventados por nosotros: mean_absolute_deviation, decode_cyclic, move_one_ball, bf (planetas), find_zero (bisección). Dificultad real y reconocida, no calibrada a mano |
+
+## Importar más de HumanEval
+
+`evals/humaneval/subset.json` tiene solo los 5 problemas elegidos (no las
+164 del dataset completo, para no inflar el repo). Para sumar otro:
+
+```bash
+# 1. Bajar el dataset completo (una vez, no se commitea)
+curl -sL https://raw.githubusercontent.com/openai/human-eval/master/data/HumanEval.jsonl.gz | gunzip > /tmp/HumanEval.jsonl
+
+# 2. Elegir un task_id (ej HumanEval/53) y agregarlo a evals/humaneval/subset.json
+# 3. Regenerar
+python importar_humaneval.py
+
+# 4. SIEMPRE validar antes de confiar en la tarea nueva: la solución canónica
+#    debe dar PASS, un stub vacío debe dar FAIL (ver el proceso en el historial
+#    de commits — importar_humaneval.py no lo automatiza todavía)
+```
 
 ## Agregar una tarea
 
