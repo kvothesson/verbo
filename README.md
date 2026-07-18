@@ -33,7 +33,7 @@ Eso es todo. `verbo.py` es un solo archivo, sin más dependencias.
 | Proveedor | Key gratis en | Ideal para |
 |---|---|---|
 | **Groq** | https://console.groq.com/keys | Velocidad absurda (hardware LPU) |
-| **Gemini** | https://aistudio.google.com/apikey | Límites generosos (250k tokens/min) |
+| **Gemini** | https://aistudio.google.com/apikey | Flash/Flash-Lite gratis con límites diarios chicos (desde 2026 los Pro son solo pagos, y habilitar billing elimina el tier gratis del proyecto) |
 | **OpenRouter** | https://openrouter.ai/settings/keys | Variedad de modelos `:free` |
 | **Ollama** | https://ollama.com — sin key | 100% local y privado, sin internet |
 
