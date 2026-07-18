@@ -37,6 +37,7 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 06 | test-rojo | Arreglar código para que pase un test — **con detector de trampa**: si el agente modifica el test en vez del código, FAIL |
 | 07 | codebase-bug | Bug enterrado en una codebase de 4 archivos: solo se da el síntoma, el agente debe navegar el código y localizarlo |
 | 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
+| 09 | casos-borde | Spec con reglas de validación no obvias (tipos, negativos, cero vs ausente). Una implementación que solo cubre el camino feliz revienta en producción — verificado: una solución ingenua da TypeError en el caso de tipo incorrecto |
 
 ## Agregar una tarea
 

@@ -1,0 +1,14 @@
+Creá un archivo procesar.py con una función procesar_ventas(registros) que reciba una lista de diccionarios con las claves "producto", "precio" y "cantidad", y devuelva una tupla (total, invalidos):
+
+- total: la suma de precio * cantidad de todos los registros VÁLIDOS.
+- invalidos: una lista con el "producto" de cada registro inválido, en el mismo orden en que aparecen en la lista de entrada.
+
+Un registro es inválido si cumple alguna de estas condiciones:
+- Falta la clave "precio" o la clave "cantidad"
+- "precio" o "cantidad" no son números (int o float) — por ejemplo, si "cantidad" es un string
+- "precio" es negativo o cero
+- "cantidad" es negativa
+
+Un registro con "cantidad" igual a 0 es VÁLIDO (no vendió nada ese día, pero el dato está bien formado) y debe sumar 0 al total.
+
+No hace falta ejecutar nada al final ni imprimir resultados: alcanza con que la función quede definida correctamente en procesar.py.
