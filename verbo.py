@@ -76,7 +76,8 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0}
 
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
-FALLBACKS_DEFAULT = "groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b"
+FALLBACKS_DEFAULT = ("groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
+                     "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b")
 CLIENTES = {}
 
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
@@ -273,7 +274,11 @@ def llamar_con_reintentos(estado, mensajes):
             estado["idx"] += 1
             continue
         client, modelo = par
-        for intento in range(4):
+        # Groq en free tier suele devolver 429 casi instantáneo (sin cupo,
+        # no por ráfaga): insistir mucho en el mismo modelo quema el presupuesto
+        # de tiempo del proceso. Mejor fallar rápido (2 intentos) y probar el
+        # siguiente modelo de la cadena, que tiene presupuesto propio intacto.
+        for intento in range(2):
             try:
                 respuesta = client.chat.completions.create(
                     model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
@@ -283,8 +288,8 @@ def llamar_con_reintentos(estado, mensajes):
                 return respuesta
             except RateLimitError as e:
                 m = re.search(r"try again in ([0-9.]+)s", str(e))
-                espera = min(60.0, float(m.group(1)) + 1) if m else 15.0 * (intento + 1)
-                print(f"  [límite de tasa; esperando {espera:.0f}s...]")
+                espera = min(30.0, float(m.group(1)) + 1) if m else 10.0 * (intento + 1)
+                print(f"  [límite de tasa en {modelo}; esperando {espera:.0f}s...]")
                 time.sleep(espera)
         estado["idx"] += 1
         if estado["idx"] < len(estado["modelos"]):
