@@ -34,6 +34,8 @@ jobs:
       - name: evolucionar (1 iteración diaria)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python evals/evolucionar.py --iteraciones 1 -r 1 --pausa 20
 
       - name: pushear mejoras aceptadas
