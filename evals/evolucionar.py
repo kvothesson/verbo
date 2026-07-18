@@ -122,9 +122,11 @@ def mutar_con_verbo(modelo_mutador, base):
         cwd=REPO, capture_output=True, text=True, timeout=600,
         encoding="utf-8", errors="replace")
     salida = (r.stdout or "").strip()
-    print("  --- mutador ---")
-    print("  " + "\n  ".join(salida.splitlines()[-8:]))
-    lineas = [l for l in salida.splitlines() if l.strip() and not l.startswith(("[verbo-stats]", "  →", "VERBO ·"))]
+    print("  --- mutador (salida completa) ---")
+    print("  " + "\n  ".join(salida.splitlines()))
+    print("  --- fin mutador ---")
+    lineas = [l for l in salida.splitlines()
+              if l.strip() and not l.startswith(("[verbo-stats]", "  →", "  -", "VERBO ·"))]
     return lineas[-1][:100] if lineas else "mejora automática"
 
 

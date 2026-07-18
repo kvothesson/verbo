@@ -186,6 +186,8 @@ def ejecutar_herramienta(nombre, args, auto):
             if ocurrencias > 1:
                 return f"ERROR: el texto aparece {ocurrencias} veces. Agregá más contexto para que sea único."
             ruta.write_text(contenido.replace(args["buscar"], args["reemplazar"], 1), encoding="utf-8")
+            print(f"    - buscar:     {args['buscar'][:200]!r}")
+            print(f"    - reemplazar: {args['reemplazar'][:200]!r}")
             return f"OK: editado {ruta}"
 
         if nombre == "buscar":
