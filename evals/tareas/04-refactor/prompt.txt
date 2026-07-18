@@ -1,0 +1,1 @@
+Renombrá la función suma_nums a sumar en todo el proyecto (calculadora.py y quien la use). Verificá que main.py siga funcionando igual que antes.

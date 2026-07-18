@@ -72,6 +72,8 @@ PROVEEDORES = {
     },
 }
 
+ESTADISTICAS = {"llamadas": 0, "tokens": 0}
+
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
 MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
 MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
@@ -206,8 +208,12 @@ def compactar(mensajes):
 def llamar_con_reintentos(client, modelo, mensajes):
     for intento in range(5):
         try:
-            return client.chat.completions.create(
+            respuesta = client.chat.completions.create(
                 model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
+            ESTADISTICAS["llamadas"] += 1
+            if respuesta.usage:
+                ESTADISTICAS["tokens"] += respuesta.usage.total_tokens or 0
+            return respuesta
         except RateLimitError as e:
             m = re.search(r"try again in ([0-9.]+)s", str(e))
             espera = min(60.0, float(m.group(1)) + 1) if m else 15.0 * (intento + 1)
@@ -291,8 +297,11 @@ def main():
     print(f"VERBO · {partes[0]} · {modelo} · {os.getcwd()}")
 
     if args.prompt:
+        inicio = time.time()
         mensajes.append({"role": "user", "content": args.prompt})
         turno(client, modelo, mensajes, args.auto)
+        print(f"[verbo-stats] llamadas={ESTADISTICAS['llamadas']} "
+              f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f}")
         return
 
     print("Modo interactivo. Escribí tu pedido ('salir' para terminar).\n")

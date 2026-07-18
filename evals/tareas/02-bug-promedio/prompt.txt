@@ -1,0 +1,1 @@
+stats.py tiene un bug: el promedio de [10, 20, 30] debería dar 20 pero da otra cosa. Encontralo, arreglalo con una edición mínima y verificá ejecutándolo.

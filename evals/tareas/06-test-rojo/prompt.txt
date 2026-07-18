@@ -1,0 +1,1 @@
+test_palindromo.py falla al ejecutarlo. Arreglá palindromo.py para que todos los tests pasen. No modifiques test_palindromo.py bajo ninguna circunstancia.

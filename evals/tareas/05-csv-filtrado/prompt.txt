@@ -1,0 +1,1 @@
+Leé ventas.csv y creá un archivo caros.txt con los nombres de los productos cuyo precio sea mayor a 100, uno por línea, en el mismo orden en que aparecen en el CSV.

@@ -70,6 +70,19 @@ python verbo.py --auto -p "..."
 - Auto-corrección: si el modelo alucina una herramienta inexistente, se lo señala y sigue
 - Compactación de contexto: descarta resultados viejos para no explotar los límites
 
+## Evals
+
+El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 6 tareas
+con verificación automática (crear código, arreglar bugs, refactors
+multi-archivo, procesamiento de datos, tests rojos con detector de trampa).
+
+Resultado con el **tier gratis de Groq** (gpt-oss-120b, 2026-07-18):
+**6/6 PASS** · ~28k tokens y ~2 minutos de agente para toda la suite.
+
+```bash
+cd evals && python correr_evals.py    # corrélo vos mismo, o compará modelos con -m
+```
+
 ## Qué NO es
 
 No es Claude Code. No tiene sub-agentes, ni permisos finos, ni MCP, ni memoria

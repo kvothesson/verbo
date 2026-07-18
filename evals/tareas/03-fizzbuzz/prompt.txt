@@ -1,0 +1,1 @@
+Creá un archivo fizzbuzz.py con una función fizzbuzz(n) que devuelva una lista de strings para los números de 1 a n: múltiplos de 3 son "Fizz", de 5 son "Buzz", de ambos "FizzBuzz", el resto el número como string. Al ejecutar el archivo debe imprimir los primeros 15 valores separados por coma. Verificá ejecutándolo.
