@@ -31,13 +31,6 @@ jobs:
           git config user.name "Kvothesson"
           git config user.email "kvothesson@users.noreply.github.com"
 
-      - name: diagnóstico del secret (no expone el valor)
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          echo "largo del secret: ${#GROQ_API_KEY} caracteres"
-          if [ -z "$GROQ_API_KEY" ]; then echo "VACIO"; else echo "no vacío, empieza con: ${GROQ_API_KEY:0:4}"; fi
-
       - name: evolucionar (1 iteración diaria)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

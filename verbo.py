@@ -74,6 +74,11 @@ PROVEEDORES = {
 
 ESTADISTICAS = {"llamadas": 0, "tokens": 0}
 
+# Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
+# presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
+FALLBACKS_DEFAULT = "groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b"
+CLIENTES = {}
+
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
 MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
 MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
@@ -238,38 +243,71 @@ def compactar(mensajes):
                 break
 
 
-def llamar_con_reintentos(client, modelo, mensajes):
-    for intento in range(5):
-        try:
-            respuesta = client.chat.completions.create(
-                model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
-            ESTADISTICAS["llamadas"] += 1
-            if respuesta.usage:
-                ESTADISTICAS["tokens"] += respuesta.usage.total_tokens or 0
-            return respuesta
-        except RateLimitError as e:
-            m = re.search(r"try again in ([0-9.]+)s", str(e))
-            espera = min(60.0, float(m.group(1)) + 1) if m else 15.0 * (intento + 1)
-            print(f"  [límite de tasa del proveedor; esperando {espera:.0f}s...]")
-            time.sleep(espera)
-    raise SystemExit("ERROR: demasiados límites de tasa seguidos. Probá otro modelo (-m) o esperá un minuto.")
+def cliente_para(modelo_completo):
+    """Devuelve (cliente, nombre_de_modelo) para un string proveedor/modelo, o None si falta la key."""
+    if modelo_completo in CLIENTES:
+        return CLIENTES[modelo_completo]
+    partes = modelo_completo.split("/", 1)
+    prov = PROVEEDORES.get(partes[0])
+    if not prov:
+        return None
+    api_key = "sin-key"
+    if prov["key_env"]:
+        api_key = os.environ.get(prov["key_env"], "")
+        if not api_key:
+            return None
+    par = (OpenAI(base_url=prov["base_url"], api_key=api_key),
+           partes[1] if len(partes) > 1 and partes[1] else prov["default"])
+    CLIENTES[modelo_completo] = par
+    return par
 
 
-def turno(client, modelo, mensajes, auto):
+def llamar_con_reintentos(estado, mensajes):
+    """Intenta con el modelo actual; si agota los reintentos por rate limit,
+    cae en cascada al siguiente modelo de la lista (presupuestos separados)."""
+    while estado["idx"] < len(estado["modelos"]):
+        par = cliente_para(estado["modelos"][estado["idx"]])
+        if par is None:
+            estado["idx"] += 1
+            continue
+        client, modelo = par
+        for intento in range(4):
+            try:
+                respuesta = client.chat.completions.create(
+                    model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
+                ESTADISTICAS["llamadas"] += 1
+                if respuesta.usage:
+                    ESTADISTICAS["tokens"] += respuesta.usage.total_tokens or 0
+                return respuesta
+            except RateLimitError as e:
+                m = re.search(r"try again in ([0-9.]+)s", str(e))
+                espera = min(60.0, float(m.group(1)) + 1) if m else 15.0 * (intento + 1)
+                print(f"  [límite de tasa; esperando {espera:.0f}s...]")
+                time.sleep(espera)
+        estado["idx"] += 1
+        if estado["idx"] < len(estado["modelos"]):
+            print(f"  [rate limit persistente; fallback a {estado['modelos'][estado['idx']]}]")
+    raise SystemExit("ERROR: todos los modelos de la cadena agotaron su límite de tasa. "
+                     "Esperá unos minutos o agregá otro proveedor con --fallback.")
+
+
+def turno(estado, mensajes, auto):
     """Un pedido del usuario: itera hasta que el modelo deja de pedir herramientas."""
     for _ in range(MAX_TURNOS):
         compactar(mensajes)
         try:
-            respuesta = llamar_con_reintentos(client, modelo, mensajes)
+            respuesta = llamar_con_reintentos(estado, mensajes)
         except BadRequestError as e:
             # Algunos proveedores (Groq) devuelven 400 si el modelo alucina una
             # herramienta inexistente o genera un tool call malformado;
-            # se lo devolvemos para que se corrija.
+            # se lo devolvemos para que se corrija. El sleep evita ráfagas de
+            # 400+429 retroalimentándose contra el límite de requests/minuto.
             if "tool" in str(e).lower() or "failed_generation" in str(e):
-                print("  [el modelo llamó una herramienta inexistente; corrigiendo...]")
+                print("  [tool call inválido del modelo; corrigiendo...]")
+                time.sleep(2)
                 mensajes.append({"role": "user", "content":
-                    "[sistema] Llamaste una herramienta que no existe. Las únicas herramientas "
-                    "disponibles son: leer, escribir, editar, ejecutar. Reintentá con una de esas."})
+                    "[sistema] Tu llamada a herramienta fue inválida. Las únicas herramientas "
+                    "disponibles son: leer, escribir, editar, ejecutar, buscar. Reintentá."})
                 continue
             raise
         msg = respuesta.choices[0].message
@@ -307,6 +345,9 @@ def main():
                         help="proveedor/modelo, ej: groq/llama-3.3-70b-versatile, gemini/gemini-2.5-flash, ollama/qwen2.5-coder:7b")
     parser.add_argument("--auto", action="store_true",
                         help="No pedir confirmación antes de ejecutar comandos")
+    parser.add_argument("--fallback", default=os.environ.get("VERBO_FALLBACKS", FALLBACKS_DEFAULT),
+                        help="Modelos alternativos si el principal agota su rate limit, "
+                             "separados por coma. '' para desactivar.")
     args = parser.parse_args()
 
     cargar_env()
@@ -316,16 +357,15 @@ def main():
         print(f"Proveedor desconocido: '{partes[0]}'. Opciones: {', '.join(PROVEEDORES)}")
         sys.exit(1)
     prov = PROVEEDORES[partes[0]]
-    modelo = partes[1] if len(partes) > 1 and partes[1] else prov["default"]
+    if prov["key_env"] and not os.environ.get(prov["key_env"], ""):
+        print(f"Falta la key: definí {prov['key_env']} (conseguila gratis en {prov['key_url']})")
+        sys.exit(1)
 
-    api_key = "sin-key"
-    if prov["key_env"]:
-        api_key = os.environ.get(prov["key_env"], "")
-        if not api_key:
-            print(f"Falta la key: definí {prov['key_env']} (conseguila gratis en {prov['key_url']})")
-            sys.exit(1)
-
-    client = OpenAI(base_url=prov["base_url"], api_key=api_key)
+    cadena = [args.modelo] + [m.strip() for m in args.fallback.split(",")
+                              if m.strip() and m.strip() != args.modelo]
+    estado = {"modelos": cadena, "idx": 0}
+    par = cliente_para(args.modelo)
+    modelo = par[1] if par else args.modelo
     mensajes = [{"role": "system", "content": prompt_sistema()}]
 
     print(f"VERBO · {partes[0]} · {modelo} · {os.getcwd()}")
@@ -333,7 +373,7 @@ def main():
     if args.prompt:
         inicio = time.time()
         mensajes.append({"role": "user", "content": args.prompt})
-        turno(client, modelo, mensajes, args.auto)
+        turno(estado, mensajes, args.auto)
         print(f"[verbo-stats] llamadas={ESTADISTICAS['llamadas']} "
               f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f}")
         return
@@ -350,7 +390,7 @@ def main():
         if pedido.lower() in ("salir", "exit", "quit", "chau"):
             break
         mensajes.append({"role": "user", "content": pedido})
-        turno(client, modelo, mensajes, args.auto)
+        turno(estado, mensajes, args.auto)
 
 
 if __name__ == "__main__":
