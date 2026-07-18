@@ -74,7 +74,7 @@ def correr_suite(modelo_agente, reps, pausa):
     }
 
 
-def pedir_mutacion(client, modelo_mutador, fuente, base):
+def pedir_mutacion(client, modelo_mutador, fuente, base, feedback=None):
     reporte = (f"aciertos: {base['aciertos']}/{base['total']} · "
                f"tokens totales: {base['tokens']}\n")
     if base["fallas"]:
@@ -91,18 +91,23 @@ def pedir_mutacion(client, modelo_mutador, fuente, base):
         "prompt de sistema, al manejo de errores, al loop, o a las herramientas.\n"
         "Reglas estrictas:\n"
         "- Máximo 3 ediciones de tipo buscar/reemplazar con texto EXACTO y único\n"
+        "- Las ediciones se aplican sobre el TEXTO FUENTE del archivo .py tal cual: "
+        "dentro de los strings del código los saltos de línea son \\n literales "
+        "(dos caracteres), copialos exactamente así\n"
         "- No agregar dependencias nuevas ni cambiar la interfaz de línea de comandos\n"
         "- Cambios conservadores: mejor una mejora chica que un rediseño\n"
         "Respondé SOLO con un JSON válido con esta forma:\n"
         '{"razon": "una línea explicando la mejora", '
         '"ediciones": [{"buscar": "texto exacto actual", "reemplazar": "texto nuevo"}]}'
     )
+    mensajes = [
+        {"role": "system", "content": instrucciones},
+        {"role": "user", "content": f"REPORTE:\n{reporte}\n\nCODIGO:\n{fuente}"},
+    ]
+    if feedback:
+        mensajes.append({"role": "user", "content": f"Tu intento anterior falló: {feedback}"})
     r = client.chat.completions.create(
-        model=modelo_mutador, temperature=0.4,
-        messages=[
-            {"role": "system", "content": instrucciones},
-            {"role": "user", "content": f"REPORTE:\n{reporte}\n\nCODIGO:\n{fuente}"},
-        ])
+        model=modelo_mutador, temperature=0.4, messages=mensajes)
     texto = r.choices[0].message.content or ""
     m = re.search(r"\{.*\}", texto, re.DOTALL)
     if not m:
@@ -118,9 +123,17 @@ def pedir_mutacion(client, modelo_mutador, fuente, base):
 def aplicar(fuente, ediciones):
     for ed in ediciones[:3]:
         buscar = ed.get("buscar", "")
-        if fuente.count(buscar) != 1:
+        reemplazar = ed.get("reemplazar", "")
+        # el mutador suele confundir \n reales con los \n literales de los strings
+        variantes = [(buscar, reemplazar)]
+        if "\n" in buscar:
+            variantes.append((buscar.replace("\n", "\\n"), reemplazar.replace("\n", "\\n")))
+        if buscar.endswith("\n"):
+            variantes.append((buscar.rstrip("\n"), reemplazar.rstrip("\n")))
+        elegido = next(((b, r) for b, r in variantes if b and fuente.count(b) == 1), None)
+        if elegido is None:
             return None, f"edición no aplicable (apariciones={fuente.count(buscar)}): {buscar[:80]!r}"
-        fuente = fuente.replace(buscar, ed.get("reemplazar", ""), 1)
+        fuente = fuente.replace(elegido[0], elegido[1], 1)
     return fuente, None
 
 
@@ -165,15 +178,22 @@ def main():
     for i in range(1, args.iteraciones + 1):
         print(f"\n[evolucion] iteración {i}: pidiendo mutación a {args.modelo_mutador}")
         fuente = ARCHIVO_VERBO.read_text(encoding="utf-8")
-        mut = pedir_mutacion(client, modelo_mutador, fuente, base)
-        if not mut:
-            print("[evolucion] el mutador no produjo una mutación válida; salto iteración")
-            continue
-        print(f"[evolucion] propuesta: {mut.get('razon', '(sin razón)')}")
-
-        nueva, err = aplicar(fuente, mut["ediciones"])
-        if err:
-            print(f"[evolucion] {err}; salto iteración")
+        nueva, feedback = None, None
+        for intento in range(2):
+            mut = pedir_mutacion(client, modelo_mutador, fuente, base, feedback)
+            if not mut:
+                feedback = "tu respuesta no fue un JSON válido con al menos una edición"
+                continue
+            print(f"[evolucion] propuesta: {mut.get('razon', '(sin razón)')}")
+            nueva, err = aplicar(fuente, mut["ediciones"])
+            if not err:
+                break
+            print(f"[evolucion] {err}")
+            feedback = (f"tus ediciones no aplicaron: {err}. Copiá el texto EXACTO del "
+                        "código fuente (los \\n dentro de strings son literales).")
+            nueva = None
+        if nueva is None:
+            print("[evolucion] sin mutación aplicable; salto iteración")
             continue
         ARCHIVO_VERBO.write_text(nueva, encoding="utf-8")
 

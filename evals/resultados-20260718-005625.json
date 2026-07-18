@@ -1,0 +1,116 @@
+{
+  "groq/llama-3.3-70b-versatile": [
+    {
+      "tarea": "01-crear-script",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "01-crear-script",
+          "paso": true,
+          "segundos": 10.3,
+          "llamadas": 2,
+          "tokens": 1803,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "02-bug-promedio",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "02-bug-promedio",
+          "paso": true,
+          "segundos": 6.7,
+          "llamadas": 3,
+          "tokens": 3384,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "03-fizzbuzz",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "03-fizzbuzz",
+          "paso": true,
+          "segundos": 9.2,
+          "llamadas": 2,
+          "tokens": 2125,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "04-refactor",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "04-refactor",
+          "paso": true,
+          "segundos": 8.4,
+          "llamadas": 4,
+          "tokens": 5706,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "05-csv-filtrado",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "05-csv-filtrado",
+          "paso": false,
+          "segundos": 14.4,
+          "llamadas": 3,
+          "tokens": 4637,
+          "detalle": "y\", line 4, in <module>\n    assert contenido == [\"mate imperial\", \"termo acero\", \"pava electrica\"], \\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: contenido incorrecto: ['mate imperial', 'bombilla', 'termo acero', 'yerba 1kg', 'pava electrica', 'azucar']"
+        }
+      ]
+    },
+    {
+      "tarea": "06-test-rojo",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "06-test-rojo",
+          "paso": true,
+          "segundos": 11.0,
+          "llamadas": 4,
+          "tokens": 5795,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "07-codebase-bug",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "07-codebase-bug",
+          "paso": false,
+          "segundos": 6.5,
+          "llamadas": 2,
+          "tokens": 2217,
+          "detalle": "ecent call last):\n  File \"D:\\repos\\blank\\verbo\\evals\\tareas\\07-codebase-bug\\verificar.py\", line 11, in <module>\n    assert reportes.agotados(repo) == [\"a\", \"c\"], f\"agotados incorrecto: {reportes.agotados(repo)}\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: agotados incorrecto: []"
+        }
+      ]
+    },
+    {
+      "tarea": "08-tdd-carrito",
+      "aciertos": 1,
+      "corridas": [
+        {
+          "tarea": "08-tdd-carrito",
+          "paso": true,
+          "segundos": 9.8,
+          "llamadas": 5,
+          "tokens": 11776,
+          "detalle": ""
+        }
+      ]
+    }
+  ]
+}
