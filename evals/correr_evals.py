@@ -36,7 +36,7 @@ TAREAS = AQUI / "tareas"
 TIMEOUT_TAREA = 300
 
 
-def correr_tarea(tarea: Path, modelo: str, pausa: int):
+def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False):
     prompt = (tarea / "prompt.txt").read_text(encoding="utf-8").strip()
     sandbox = Path(tempfile.mkdtemp(prefix=f"verbo-eval-{tarea.name}-"))
     setup = tarea / "setup"
@@ -47,6 +47,8 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int):
     cmd = [sys.executable, str(VERBO), "--auto", "-p", prompt]
     if modelo:
         cmd += ["-m", modelo]
+    if puro:
+        cmd += ["--fallback", ""]
 
     inicio = time.time()
     try:
@@ -95,6 +97,9 @@ def main():
                         help="Segundos de espera entre tareas para respetar límites TPM (default 15)")
     parser.add_argument("-r", "--repeticiones", type=int, default=1,
                         help="Corridas por tarea: los agentes no son deterministas, 3 da un pass rate honesto")
+    parser.add_argument("--puro", action="store_true",
+                        help="Desactiva la cadena de fallbacks: mide cada modelo aislado "
+                             "(sin esto, un 429 haría que otro modelo resuelva la tarea)")
     args = parser.parse_args()
 
     modelos = args.modelo or [None]  # None = default de verbo.py
@@ -114,7 +119,8 @@ def main():
             corridas = []
             for i in range(args.repeticiones):
                 es_ultima = tarea == tareas[-1] and i == args.repeticiones - 1
-                res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa)
+                res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
+                                   puro=args.puro)
                 corridas.append(res)
                 print("P" if res["paso"] else "F", end="", flush=True)
             aciertos_tarea = sum(r["paso"] for r in corridas)
