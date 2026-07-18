@@ -1,0 +1,180 @@
+{
+  "(default)": [
+    {
+      "tarea": "01-crear-script",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "01-crear-script",
+          "paso": true,
+          "segundos": 6.1,
+          "llamadas": 3,
+          "tokens": 1801,
+          "detalle": ""
+        },
+        {
+          "tarea": "01-crear-script",
+          "paso": true,
+          "segundos": 6.1,
+          "llamadas": 3,
+          "tokens": 1795,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "02-bug-promedio",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "02-bug-promedio",
+          "paso": true,
+          "segundos": 8.6,
+          "llamadas": 5,
+          "tokens": 3760,
+          "detalle": ""
+        },
+        {
+          "tarea": "02-bug-promedio",
+          "paso": true,
+          "segundos": 7.5,
+          "llamadas": 5,
+          "tokens": 3750,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "03-fizzbuzz",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "03-fizzbuzz",
+          "paso": true,
+          "segundos": 6.6,
+          "llamadas": 3,
+          "tokens": 2803,
+          "detalle": ""
+        },
+        {
+          "tarea": "03-fizzbuzz",
+          "paso": true,
+          "segundos": 7.6,
+          "llamadas": 3,
+          "tokens": 2510,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "04-refactor",
+      "aciertos": 0,
+      "corridas": [
+        {
+          "tarea": "04-refactor",
+          "paso": false,
+          "segundos": 8.1,
+          "llamadas": 6,
+          "tokens": 4793,
+          "detalle": "Traceback (most recent call last):\n  File \"D:\\repos\\blank\\verbo\\evals\\tareas\\04-refactor\\verificar.py\", line 7, in <module>\n    assert \"suma_nums\" not in main, \"qued� suma_nums en main.py\"\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: qued� suma_nums en main.py"
+        },
+        {
+          "tarea": "04-refactor",
+          "paso": false,
+          "segundos": 6.1,
+          "llamadas": 0,
+          "tokens": 0,
+          "detalle": " 'failed_generation': \"Now need to rename imports and calls. In calculadora.py also need to rename function name for any references? Only definition changed. Need to update any usage in other files. In main.py import and calls. Also maybe other files, but only those two exist. Let's edit main.py.\"}}"
+        }
+      ]
+    },
+    {
+      "tarea": "05-csv-filtrado",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "05-csv-filtrado",
+          "paso": true,
+          "segundos": 7.0,
+          "llamadas": 4,
+          "tokens": 3115,
+          "detalle": ""
+        },
+        {
+          "tarea": "05-csv-filtrado",
+          "paso": true,
+          "segundos": 6.7,
+          "llamadas": 4,
+          "tokens": 3156,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "06-test-rojo",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "06-test-rojo",
+          "paso": true,
+          "segundos": 17.7,
+          "llamadas": 9,
+          "tokens": 9963,
+          "detalle": ""
+        },
+        {
+          "tarea": "06-test-rojo",
+          "paso": true,
+          "segundos": 75.0,
+          "llamadas": 9,
+          "tokens": 10145,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "07-codebase-bug",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "07-codebase-bug",
+          "paso": true,
+          "segundos": 29.3,
+          "llamadas": 6,
+          "tokens": 6522,
+          "detalle": ""
+        },
+        {
+          "tarea": "07-codebase-bug",
+          "paso": true,
+          "segundos": 120.3,
+          "llamadas": 6,
+          "tokens": 8875,
+          "detalle": ""
+        }
+      ]
+    },
+    {
+      "tarea": "08-tdd-carrito",
+      "aciertos": 2,
+      "corridas": [
+        {
+          "tarea": "08-tdd-carrito",
+          "paso": true,
+          "segundos": 16.5,
+          "llamadas": 5,
+          "tokens": 5697,
+          "detalle": ""
+        },
+        {
+          "tarea": "08-tdd-carrito",
+          "paso": true,
+          "segundos": 27.4,
+          "llamadas": 5,
+          "tokens": 6363,
+          "detalle": ""
+        }
+      ]
+    }
+  ]
+}

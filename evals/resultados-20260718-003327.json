@@ -1,0 +1,34 @@
+{
+  "(default)": [
+    {
+      "tarea": "04-refactor",
+      "aciertos": 3,
+      "corridas": [
+        {
+          "tarea": "04-refactor",
+          "paso": true,
+          "segundos": 43.4,
+          "llamadas": 11,
+          "tokens": 10443,
+          "detalle": ""
+        },
+        {
+          "tarea": "04-refactor",
+          "paso": true,
+          "segundos": 40.9,
+          "llamadas": 9,
+          "tokens": 8076,
+          "detalle": ""
+        },
+        {
+          "tarea": "04-refactor",
+          "paso": true,
+          "segundos": 73.4,
+          "llamadas": 11,
+          "tokens": 10280,
+          "detalle": ""
+        }
+      ]
+    }
+  ]
+}

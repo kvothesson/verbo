@@ -93,6 +93,8 @@ def main():
     parser.add_argument("--tarea", help="Correr solo esta tarea (nombre de carpeta)")
     parser.add_argument("--pausa", type=int, default=15,
                         help="Segundos de espera entre tareas para respetar límites TPM (default 15)")
+    parser.add_argument("-r", "--repeticiones", type=int, default=1,
+                        help="Corridas por tarea: los agentes no son deterministas, 3 da un pass rate honesto")
     args = parser.parse_args()
 
     modelos = args.modelo or [None]  # None = default de verbo.py
@@ -109,15 +111,25 @@ def main():
         resultados = []
         for tarea in tareas:
             print(f"  {tarea.name} ... ", end="", flush=True)
-            res = correr_tarea(tarea, modelo, args.pausa if tarea != tareas[-1] else 0)
-            resultados.append(res)
-            estado = "PASS" if res["paso"] else "FAIL"
-            print(f"{estado}  ({res['segundos']}s · {res['tokens']} tokens · {res['llamadas']} llamadas)")
-            if not res["paso"] and res["detalle"]:
-                print(f"      motivo: {res['detalle']}")
-        aciertos = sum(r["paso"] for r in resultados)
-        tokens = sum(r["tokens"] for r in resultados)
-        print(f"  → {aciertos}/{len(resultados)} PASS · {tokens} tokens totales")
+            corridas = []
+            for i in range(args.repeticiones):
+                es_ultima = tarea == tareas[-1] and i == args.repeticiones - 1
+                res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa)
+                corridas.append(res)
+                print("P" if res["paso"] else "F", end="", flush=True)
+            aciertos_tarea = sum(r["paso"] for r in corridas)
+            seg = sum(r["segundos"] for r in corridas) / len(corridas)
+            tok = sum(r["tokens"] for r in corridas) // len(corridas)
+            print(f"  {aciertos_tarea}/{len(corridas)} PASS  (prom: {seg:.1f}s · {tok} tokens)")
+            for r in corridas:
+                if not r["paso"] and r["detalle"]:
+                    print(f"      motivo: {r['detalle']}")
+            resultados.append({"tarea": tarea.name, "aciertos": aciertos_tarea,
+                               "corridas": corridas})
+        total_ok = sum(r["aciertos"] for r in resultados)
+        total = sum(len(r["corridas"]) for r in resultados)
+        tokens = sum(c["tokens"] for r in resultados for c in r["corridas"])
+        print(f"  TOTAL: {total_ok}/{total} PASS ({100 * total_ok / total:.0f}%) · {tokens} tokens")
         todos[etiqueta] = resultados
 
     archivo = AQUI / f"resultados-{datetime.now():%Y%m%d-%H%M%S}.json"

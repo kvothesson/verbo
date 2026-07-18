@@ -15,7 +15,12 @@ python correr_evals.py -m gemini/gemini-2.5-flash       # otro modelo
 python correr_evals.py -m groq/openai/gpt-oss-120b -m groq/llama-3.3-70b-versatile   # comparar
 python correr_evals.py --tarea 06-test-rojo             # una sola tarea
 python correr_evals.py --pausa 30                       # más espera entre tareas (límites TPM)
+python correr_evals.py -r 3                             # 3 corridas por tarea (varianza)
 ```
+
+Los agentes **no son deterministas**: la misma tarea puede salir bien o mal
+según el humor del sampling. Una corrida única es anécdota; `-r 3` da un pass
+rate honesto. El reporte muestra `PPF 2/3` — cada letra es una corrida.
 
 Cada corrida guarda un `resultados-<fecha>.json` con pass/fail, segundos,
 tokens y llamadas por tarea — para comparar modelos con números.
@@ -30,6 +35,8 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 04 | refactor | Cambio coordinado en múltiples archivos sin romper nada |
 | 05 | csv-filtrado | Procesar datos y producir un archivo con formato exacto |
 | 06 | test-rojo | Arreglar código para que pase un test — **con detector de trampa**: si el agente modifica el test en vez del código, FAIL |
+| 07 | codebase-bug | Bug enterrado en una codebase de 4 archivos: solo se da el síntoma, el agente debe navegar el código y localizarlo |
+| 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
 
 ## Agregar una tarea
 

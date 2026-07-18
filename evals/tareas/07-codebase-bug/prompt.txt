@@ -1,0 +1,1 @@
+Este proyecto de inventario tiene un bug. Al ejecutar main.py, el reporte de agotados debería listar "bombilla" (se vendieron sus 2 unidades y quedó en stock 0), pero sale una lista vacía. Encontrá el bug, arreglalo con el cambio mínimo y verificá ejecutando main.py.

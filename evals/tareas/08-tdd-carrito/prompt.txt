@@ -1,0 +1,1 @@
+Existe test_carrito.py pero no existe carrito.py. Creá carrito.py con la clase Carrito de modo que todos los tests pasen. No modifiques test_carrito.py bajo ninguna circunstancia. Verificá ejecutando los tests.

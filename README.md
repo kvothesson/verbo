@@ -72,12 +72,15 @@ python verbo.py --auto -p "..."
 
 ## Evals
 
-El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 6 tareas
+El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 8 tareas
 con verificación automática (crear código, arreglar bugs, refactors
-multi-archivo, procesamiento de datos, tests rojos con detector de trampa).
+multi-archivo, bugs enterrados en codebases, TDD, tests rojos con detector de
+trampa) y soporte de corridas repetidas (`-r 3`) para medir varianza.
 
 Resultado con el **tier gratis de Groq** (gpt-oss-120b, 2026-07-18):
-**6/6 PASS** · ~28k tokens y ~2 minutos de agente para toda la suite.
+**14/16 PASS (88%)** en 8 tareas × 2 corridas · ~75k tokens la suite completa.
+El punto débil detectado (refactor multi-archivo, 0/2) pasó **3/3** tras un
+fix de manejo de errores del proveedor — la suite pagándose sola.
 
 ```bash
 cd evals && python correr_evals.py    # corrélo vos mismo, o compará modelos con -m

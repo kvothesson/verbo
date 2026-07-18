@@ -230,8 +230,9 @@ def turno(client, modelo, mensajes, auto):
             respuesta = llamar_con_reintentos(client, modelo, mensajes)
         except BadRequestError as e:
             # Algunos proveedores (Groq) devuelven 400 si el modelo alucina una
-            # herramienta inexistente; se lo devolvemos para que se corrija.
-            if "tool" in str(e).lower():
+            # herramienta inexistente o genera un tool call malformado;
+            # se lo devolvemos para que se corrija.
+            if "tool" in str(e).lower() or "failed_generation" in str(e):
                 print("  [el modelo llamó una herramienta inexistente; corrigiendo...]")
                 mensajes.append({"role": "user", "content":
                     "[sistema] Llamaste una herramienta que no existe. Las únicas herramientas "
