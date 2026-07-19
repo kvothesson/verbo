@@ -13,6 +13,13 @@ evals/humaneval/subset.json contiene solo los 5 problemas elegidos (no
 las 164 del dataset completo), extraídos una vez y commiteados: la
 suite no depende de internet para correr.
 
+NOTA (2026-07-19): las tareas HumanEval fueron RETIRADAS de la suite — la
+cadena default pasó 11/11 incluyendo los 6 problemas con peor pass rate
+histórico. HumanEval (2021) está saturado para los modelos actuales; la
+dificultad real ahora viene de BigCodeBench (ver importar_bigcodebench.py).
+Este script y su subset quedan como registro y por si sirven para evaluar
+modelos más chicos.
+
 Uso: python importar_humaneval.py
 Idempotente: pisa las carpetas 10-humaneval-* si ya existen.
 """

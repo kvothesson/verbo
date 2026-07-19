@@ -1,0 +1,12 @@
+Resolvé el siguiente problema de BigCodeBench (benchmark público del BigCode Project). Guardá tu implementación en un archivo llamado solucion.py. Tu código será verificado con tests que no ves: cubrí los casos borde de la especificación.
+
+Create a dictionary containing all possible two-letter combinations of the lowercase English alphabets. The dictionary values represent the frequency of these two-letter combinations in the given word. If a combination does not appear in the word, its value will be 0.
+The function should output with:
+    dict: A dictionary with keys as two-letter alphabet combinations and values as their counts in the word.
+You should write self-contained code starting with:
+```
+from collections import Counter
+import itertools
+import string
+def task_func(word: str) -> dict:
+```

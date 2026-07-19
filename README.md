@@ -91,18 +91,19 @@ echo 'alias verbo="python /ruta/a/verbo.py"' >> ~/.bashrc
 
 ## Evals
 
-El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 20 tareas
-con verificación automática — 9 agénticas (arreglar bugs, refactors
+El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 12 tareas
+con verificación automática — 6 agénticas (arreglar bugs, refactors
 multi-archivo, bugs enterrados en codebases, TDD, tests rojos con detector de
-trampa) y 11 de [HumanEval](https://github.com/openai/human-eval) incluyendo
-los 6 problemas con peor pass rate histórico del benchmark. Soporta corridas
-repetidas (`-r 3`) para medir varianza y `--puro` para comparar modelos
-aislados sin fallbacks.
+trampa) y 6 de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench),
+el benchmark 2024 donde los mejores modelos rondan 30-40% de pass rate.
+Soporta corridas repetidas (`-r 3`) para medir varianza y `--puro` para
+comparar modelos aislados sin fallbacks.
 
-Resultados con tiers gratis (2026-07-19): la cadena default clavó **14/14
-(100%)** en la nube, y el benchmark aislado dio **cerebras/gpt-oss-120b 27/28
-(96%)** — por eso es el primer fallback. Las 6 tareas duras nuevas existen
-para que ese 100% vuelva a tener algo que perder.
+La suite se poda con datos: HumanEval completo (2021) fue retirado tras
+verificar que la cadena lo pasaba 11/11 — incluso sus 6 problemas con peor
+pass rate histórico. Medir lo que nunca falla es gastar tokens en cero
+información. Resultados de referencia (2026-07-19): cadena default **14/14**
+en la nube; benchmark aislado: **cerebras/gpt-oss-120b 27/28 (96%)**.
 
 ```bash
 cd evals && python correr_evals.py    # corrélo vos mismo, o compará modelos con -m
