@@ -82,11 +82,15 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0, "por_modelo": {}}
 
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
-# Cerebras va primero porque sirve el MISMO gpt-oss-120b del primario:
-# presupuesto extra (1M tokens/día) sin perder nada de calidad.
+# Orden según benchmark aislado (14 tareas x 2, 2026-07-19):
+#   cerebras/gpt-oss-120b primero: mismo modelo que el primario, 96% de la
+#   suite y 1M tokens/día — capacidad extra sin perder calidad.
+#   qwen sobre llama-70b: 10/10 vs 7/8 en lo que el cupo dejó correr.
+#   llama-3.1-8b-instant EXCLUIDO: fallas de calidad reales y 6k TPM que no
+#   banca el contexto de tareas medianas; quemaba tiempo y entregaba basura.
 FALLBACKS_DEFAULT = ("cerebras/gpt-oss-120b,"
-                     "groq/llama-3.3-70b-versatile,groq/qwen/qwen3.6-27b,"
-                     "groq/llama-3.1-8b-instant,groq/openai/gpt-oss-20b,"
+                     "groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
+                     "groq/openai/gpt-oss-20b,"
                      "openrouter/openai/gpt-oss-20b:free")
 CLIENTES = {}
 ENFRIAMIENTOS = {}  # modelo -> timestamp hasta el cual no volver a intentarlo
