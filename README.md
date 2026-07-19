@@ -63,6 +63,21 @@ python verbo.py -m ollama/qwen2.5-coder:7b -p "..."
 python verbo.py --auto -p "..."
 ```
 
+VERBO trabaja sobre **la carpeta donde estás parado**, y las keys las lee de
+`~/.verbo.env` desde cualquier lado. Para invocarlo como `verbo` en cualquier
+carpeta, creá un lanzador en algún directorio de tu PATH:
+
+```powershell
+# Windows: crea verbo.cmd en los Scripts de Python (ya está en el PATH)
+"@echo off`npython `"C:\ruta\a\verbo.py`" %*" |
+  Out-File "$(Split-Path (Get-Command python).Source)\Scripts\verbo.cmd" -Encoding ascii
+```
+
+```bash
+# Linux/Mac: alias en tu shell
+echo 'alias verbo="python /ruta/a/verbo.py"' >> ~/.bashrc
+```
+
 ## Qué puede hacer
 
 - **leer** archivos · **escribir** archivos · **editar** (reemplazo quirúrgico) · **ejecutar** comandos
