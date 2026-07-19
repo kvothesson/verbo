@@ -130,9 +130,10 @@ HERRAMIENTAS = [
             "required": ["comando"]}}},
     {"type": "function", "function": {
         "name": "buscar",
-        "description": "Busca texto literal en los archivos del directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+        "description": "Busca texto literal en los archivos de un directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
         "parameters": {"type": "object", "properties": {
             "texto": {"type": "string"},
+            "ruta": {"type": "string", "description": "Opcional: directorio donde buscar (default: el actual)"},
             "extension": {"type": "string", "description": "Opcional: filtrar por extensión, ej '.py'"}},
             "required": ["texto"]}}},
 ]
@@ -224,8 +225,11 @@ def ejecutar_herramienta(nombre, args, auto):
         if nombre == "buscar":
             texto = args["texto"]
             ext = args.get("extension") or ""
+            base = Path(args.get("ruta") or ".")
+            if not base.is_dir():
+                return f"ERROR: no existe el directorio {base}"
             coincidencias = []
-            for archivo in sorted(Path(".").rglob("*")):
+            for archivo in sorted(base.rglob("*")):
                 if set(archivo.parts) & {".git", "__pycache__", "node_modules", ".venv", "venv"}:
                     continue
                 if not archivo.is_file() or (ext and archivo.suffix != ext):
@@ -371,7 +375,8 @@ def turno(estado, mensajes, auto):
             # se lo devolvemos para que se corrija. El sleep evita ráfagas de
             # 400+429 retroalimentándose contra el límite de requests/minuto.
             if "tool" in str(e).lower() or "failed_generation" in str(e):
-                print("  [tool call inválido del modelo; corrigiendo...]")
+                motivo = str(e).replace("\n", " ")[:180]
+                print(f"  [tool call inválido del modelo; corrigiendo... ({motivo})]")
                 time.sleep(2)
                 mensajes.append({"role": "user", "content":
                     "[sistema] Tu llamada a herramienta fue inválida. Las únicas herramientas "
@@ -384,6 +389,10 @@ def turno(estado, mensajes, auto):
             print(f"\n{msg.content or '(sin respuesta)'}")
             mensajes.append({"role": "assistant", "content": msg.content or ""})
             return
+
+        # Feedback: si el modelo narra qué está por hacer, mostrarlo.
+        if msg.content and msg.content.strip():
+            print(f"  {msg.content.strip()[:300]}")
 
         mensajes.append({
             "role": "assistant",
@@ -401,6 +410,13 @@ def turno(estado, mensajes, auto):
             detalle = args.get("comando") or args.get("ruta") or args.get("texto") or ""
             print(f"  → {tc.function.name}: {detalle}")
             resultado = ejecutar_herramienta(tc.function.name, args, auto)
+            # Feedback: resumen de qué devolvió la herramienta, para que el
+            # usuario vea el progreso (o el error) sin leer el historial.
+            lineas = resultado.strip().splitlines() or [""]
+            resumen = lineas[0][:150]
+            if len(lineas) > 1:
+                resumen += f" (+{len(lineas) - 1} líneas)"
+            print(f"    ← {resumen}")
             mensajes.append({"role": "tool", "tool_call_id": tc.id, "content": resultado})
 
     print("\n[VERBO alcanzó el máximo de iteraciones para este pedido]")
