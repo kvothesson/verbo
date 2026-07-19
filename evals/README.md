@@ -39,6 +39,7 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
 | 09 | casos-borde | Spec con reglas de validación no obvias (tipos, negativos, cero vs ausente). Una implementación que solo cubre el camino feliz revienta en producción — verificado: una solución ingenua da TypeError en el caso de tipo incorrecto |
 | 10-14 | humaneval-* | 5 problemas de [HumanEval](https://github.com/openai/human-eval) (OpenAI, MIT), no inventados por nosotros: mean_absolute_deviation, decode_cyclic, move_one_ball, bf (planetas), find_zero (bisección). Dificultad real y reconocida, no calibrada a mano |
+| 15-20 | humaneval-* (duros) | Los 6 problemas con peor pass rate histórico de HumanEval, agregados cuando la suite llegó a 14/14 y saturó el eje de aciertos: count_nums (dígitos con signo), max_fill (redondeo de baldes), minPath (camino en grilla), is_nested (anidamiento), compare_one (tipos mixtos con coma decimal), do_algebra (precedencia de operadores). El agente no ve los tests: debe acertar desde el docstring |
 
 ## Importar más de HumanEval
 

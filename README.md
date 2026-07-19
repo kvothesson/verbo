@@ -91,15 +91,18 @@ echo 'alias verbo="python /ruta/a/verbo.py"' >> ~/.bashrc
 
 ## Evals
 
-El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 8 tareas
-con verificación automática (crear código, arreglar bugs, refactors
+El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 20 tareas
+con verificación automática — 9 agénticas (arreglar bugs, refactors
 multi-archivo, bugs enterrados en codebases, TDD, tests rojos con detector de
-trampa) y soporte de corridas repetidas (`-r 3`) para medir varianza.
+trampa) y 11 de [HumanEval](https://github.com/openai/human-eval) incluyendo
+los 6 problemas con peor pass rate histórico del benchmark. Soporta corridas
+repetidas (`-r 3`) para medir varianza y `--puro` para comparar modelos
+aislados sin fallbacks.
 
-Resultado con el **tier gratis de Groq** (gpt-oss-120b, 2026-07-18):
-**14/16 PASS (88%)** en 8 tareas × 2 corridas · ~75k tokens la suite completa.
-El punto débil detectado (refactor multi-archivo, 0/2) pasó **3/3** tras un
-fix de manejo de errores del proveedor — la suite pagándose sola.
+Resultados con tiers gratis (2026-07-19): la cadena default clavó **14/14
+(100%)** en la nube, y el benchmark aislado dio **cerebras/gpt-oss-120b 27/28
+(96%)** — por eso es el primer fallback. Las 6 tareas duras nuevas existen
+para que ese 100% vuelva a tener algo que perder.
 
 ```bash
 cd evals && python correr_evals.py    # corrélo vos mismo, o compará modelos con -m
