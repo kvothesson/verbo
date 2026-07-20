@@ -36,6 +36,7 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 07 | codebase-bug | Bug enterrado en una codebase de 4 archivos: solo se da el síntoma, el agente debe navegar el código y localizarlo |
 | 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
 | 21-26 | bigcodebench-* | 6 problemas de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench) (Apache 2.0), el benchmark 2024 donde los mejores modelos rondan 30-40%: specs largas con varias librerías stdlib y casos borde traicioneros. El agente no ve los tests |
+| 27 | edicion-sin-cadaveres | Nacida de una sesión real: arreglar un bug de rotación exige no solo que funcione, sino que el archivo quede **sin código inalcanzable ni definiciones duplicadas** — el verificador parsea el AST. Castiga el modo de falla de insertar la versión nueva de una función sin borrar la vieja |
 
 La suite se poda con datos: las tareas que ningún modelo de la cadena fallaba
 (fizzbuzz, csv, casos-borde y todo HumanEval — incluso sus 6 problemas más

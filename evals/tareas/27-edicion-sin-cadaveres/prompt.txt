@@ -1,0 +1,1 @@
+En juego.py hay un bug: llamar a rotar() sobre una Pieza no cambia nada — imagen() devuelve siempre la misma matriz, para cualquier forma. Encontrá la causa y arreglala con la edición mínima.

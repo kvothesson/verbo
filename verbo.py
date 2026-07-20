@@ -18,6 +18,7 @@ Keys: variables de entorno o un archivo .env en el directorio actual,
 junto al script, o en ~/.verbo.env
 """
 import argparse
+import ast
 import json
 import os
 import platform
@@ -165,7 +166,8 @@ def prompt_sistema():
         "5. Respondé siempre en español, breve y directo. Al terminar, resumí qué hiciste en una o dos líneas.\n"
         "6. Sé frugal con los tokens: no imprimas archivos enteros en tus respuestas ni repitas contenido que ya está en el historial.\n"
         "7. Para crear o modificar archivos usá siempre 'escribir' o 'editar', nunca redirecciones de shell (> o >>): en Windows generan encodings rotos.\n"
-        "8. Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado."
+        "8. Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.\n"
+        "9. Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto."
     )
 
 
@@ -177,6 +179,37 @@ def truncar(texto, limite=MAX_SALIDA_HERRAMIENTA):
     if len(texto) <= limite:
         return texto
     return texto[:limite] + f"\n[... truncado: {len(texto) - limite} caracteres más]"
+
+
+def _cadaveres(texto):
+    """Detecta código muerto: sentencias inalcanzables tras return/raise y
+    definiciones duplicadas en el mismo scope. Es el modo de falla típico de
+    una edición que inserta la versión nueva de una función sin borrar la
+    vieja — compila perfecto, pero el archivo queda podrido."""
+    try:
+        arbol = ast.parse(texto)
+    except SyntaxError:
+        return []
+    problemas = []
+    for nodo in ast.walk(arbol):
+        for attr in ("body", "orelse", "finalbody"):
+            cuerpo = getattr(nodo, attr, None)
+            if not isinstance(cuerpo, list):
+                continue
+            corta = False
+            for stmt in cuerpo:
+                if corta:
+                    problemas.append("código inalcanzable tras un return/raise "
+                                     f"(línea {stmt.lineno})")
+                    break
+                if isinstance(stmt, (ast.Return, ast.Raise, ast.Break, ast.Continue)):
+                    corta = True
+            nombres = [s.name for s in cuerpo
+                       if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            for n in sorted(set(nombres)):
+                if nombres.count(n) > 1:
+                    problemas.append(f"definición duplicada de '{n}'")
+    return problemas
 
 
 def ejecutar_herramienta(nombre, args, auto):
@@ -217,6 +250,15 @@ def ejecutar_herramienta(nombre, args, auto):
                     return (f"ERROR: esta edición rompería la sintaxis de Python "
                             f"(línea {e.lineno}: {e.msg}). NO se aplicó. "
                             "Revisá comillas, paréntesis y escapes, y reintentá.")
+                # Guardrail 2: compila, pero dejaría código muerto que antes
+                # no estaba (versión nueva insertada sin borrar la vieja).
+                if _compila(contenido) is None and _compila(nuevo) is None:
+                    nuevos = _cadaveres(nuevo)
+                    if len(nuevos) > len(_cadaveres(contenido)):
+                        return (f"ERROR: esta edición dejaría {nuevos[0]}. NO se "
+                                "aplicó. Probablemente insertaste la versión nueva "
+                                "sin borrar la vieja: incluí el bloque viejo "
+                                "COMPLETO en 'buscar' y reintentá.")
             ruta.write_text(nuevo, encoding="utf-8")
             print(f"    - buscar:     {args['buscar'][:200]!r}")
             print(f"    - reemplazar: {args['reemplazar'][:200]!r}")
