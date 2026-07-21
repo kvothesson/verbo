@@ -99,7 +99,14 @@ MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
 
 MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
 MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
-MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
+MAX_TURNOS = 20
+
+# Manejo global de excepciones para evitar crashes en evaluaciones
+def _handle_exception(exc_type, exc, tb):
+    print(f"Error inesperado: {exc}")
+    sys.exit(1)
+
+sys.excepthook = _handle_exception                 # iteraciones del loop agéntico por pedido
 
 HERRAMIENTAS = [
     {"type": "function", "function": {
