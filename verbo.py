@@ -106,7 +106,7 @@ def _handle_exception(exc_type, exc, tb):
     print(f"Error inesperado: {exc}")
     sys.exit(1)
 
-# sys.excepthook = _handle_exception  # disabled to avoid interfering with external tests                 # iteraciones del loop agéntico por pedido
+sys.excepthook = _handle_exception                 # iteraciones del loop agéntico por pedido
 
 HERRAMIENTAS = [
     {"type": "function", "function": {
