@@ -104,9 +104,11 @@ MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
 HERRAMIENTAS = [
     {"type": "function", "function": {
         "name": "leer",
-        "description": "Lee un archivo de texto y devuelve su contenido con números de línea.",
+        "description": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
         "parameters": {"type": "object", "properties": {
-            "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"}},
+            "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"},
+            "desde": {"type": "integer", "description": "Opcional: primera línea a leer (1 = principio)"},
+            "hasta": {"type": "integer", "description": "Opcional: última línea a leer"}},
             "required": ["ruta"]}}},
     {"type": "function", "function": {
         "name": "escribir",
@@ -171,10 +173,6 @@ def prompt_sistema():
     )
 
 
-def num_lineas(texto):
-    return "\n".join(f"{i + 1}\t{l}" for i, l in enumerate(texto.splitlines()))
-
-
 def truncar(texto, limite=MAX_SALIDA_HERRAMIENTA):
     if len(texto) <= limite:
         return texto
@@ -218,7 +216,21 @@ def ejecutar_herramienta(nombre, args, auto):
             ruta = Path(args["ruta"])
             if not ruta.is_file():
                 return f"ERROR: no existe el archivo {ruta}"
-            return truncar(num_lineas(ruta.read_text(encoding="utf-8", errors="replace")))
+            lineas = ruta.read_text(encoding="utf-8", errors="replace").splitlines()
+            total = len(lineas)
+            desde = max(1, int(args.get("desde") or 1))
+            hasta = min(total, int(args.get("hasta") or total))
+            texto = "\n".join(f"{i}\t{l}" for i, l in
+                              enumerate(lineas[desde - 1:hasta], desde))
+            if len(texto) <= MAX_SALIDA_HERRAMIENTA:
+                return texto or "(archivo vacío o rango sin líneas)"
+            # Cortar en un límite de línea y decir CÓMO seguir leyendo: sin
+            # esto, en un archivo grande el agente se queda con el principio y
+            # opera a ciegas sobre el resto.
+            recorte = texto[:MAX_SALIDA_HERRAMIENTA].rsplit("\n", 1)[0]
+            ultima = desde + recorte.count("\n")
+            return (recorte + f"\n[... cortado en la línea {ultima} de {total}. "
+                    f"Para seguir leyendo: leer con desde={ultima + 1}]")
 
         if nombre == "escribir":
             ruta = Path(args["ruta"])

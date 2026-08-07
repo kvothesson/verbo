@@ -10,12 +10,17 @@ pedir parches "a ciegas" a un modelo: el agente ve el texto exacto del código.
 
 Loop por iteración:
   1. correr la suite (baseline)
-  2. VERBO se auto-edita guiado por el reporte de fallas
+  2. VERBO se auto-edita guiado por el reporte de fallas Y por su bitácora
   3. guardrails: solo verbo.py puede cambiar + py_compile
   4. correr la suite de nuevo (candidato)
   5. si el fitness mejora -> git commit; si no -> git checkout (revert)
+  6. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
 
-Fitness: primero aciertos, después frugalidad de tokens (-10% o más).
+Fitness: aciertos con margen sobre la varianza, después frugalidad de tokens.
+
+Memoria: evals/memoria-evolucion.md, commiteada al repo (sin base de datos).
+El mutador la lee antes de editar, con el diff real de cada intento pasado y
+su veredicto — sin eso arranca ciego cada día y recicla ideas ya descartadas.
 
 Guardrails:
   - si el mutador toca cualquier archivo que no sea verbo.py, se revierte TODO
@@ -44,6 +49,14 @@ REPO = AQUI.parent
 ARCHIVO_VERBO = REPO / "verbo.py"
 LOG = AQUI / "evolucion.log"
 
+# La bitácora ES la memoria del mutador, y se commitea al repo: sin base de
+# datos, versionada y legible en GitHub. Sin esto cada corrida arranca ciega
+# y recicla ideas ya descartadas — así la evolución tocó tres veces la misma
+# línea (agregar excepthook, comentarlo, descomentarlo) en 17 días.
+MEMORIA = AQUI / "memoria-evolucion.md"
+MEMORIA_ENTRADAS = 12      # cuántos intentos pasados ve el mutador
+MEMORIA_CHARS = 5000       # tope de contexto que se le dedica a la memoria
+
 
 class Tee:
     """Duplica stdout al log para que el progreso sea visible desde afuera."""
@@ -70,9 +83,57 @@ def git(*args, check=True):
                           encoding="utf-8", errors="replace")
 
 
+def git_commit(mensaje):
+    """Commit con identidad explícita: todo lo que publica el proyecto firma
+    como Kvothesson, corra en la nube o en una máquina cualquiera."""
+    return git("-c", "user.name=Kvothesson",
+               "-c", "user.email=kvothesson@users.noreply.github.com",
+               "commit", "-m", mensaje, check=False)
+
+
 def archivos_sin_trackear():
     return {l[3:].strip() for l in git("status", "--porcelain").stdout.splitlines()
             if l.startswith("??")}
+
+
+def leer_memoria():
+    """Últimos intentos, del más reciente al más viejo, acotados en contexto."""
+    if not MEMORIA.is_file():
+        return ""
+    entradas = [e for e in MEMORIA.read_text(encoding="utf-8").split("\n## ") if e.strip()]
+    recientes = [e if e.startswith("## ") else "## " + e
+                 for e in entradas[-MEMORIA_ENTRADAS:]][::-1]
+    texto = ""
+    for e in recientes:
+        if len(texto) + len(e) > MEMORIA_CHARS:
+            break
+        texto += e.rstrip() + "\n\n"
+    return texto.strip()
+
+
+def registrar(veredicto, razon, diff, base=None, cand=None):
+    """Anota el intento en la bitácora y la commitea. Se llama SIEMPRE, incluso
+    cuando no hubo mutación o se revirtió: el valor está justamente en recordar
+    lo que no funcionó, para no reintentarlo mañana."""
+    from datetime import datetime
+    if not MEMORIA.is_file():
+        MEMORIA.write_text(
+            "# Bitácora de evolución\n\n"
+            "Memoria del mutador: cada intento de auto-mejora con su resultado.\n"
+            "La lee antes de mutar para no repetir ideas ya descartadas.\n",
+            encoding="utf-8")
+    entrada = [f"\n## {datetime.now():%Y-%m-%d} · {veredicto}",
+               f"- **Intento:** {razon}"]
+    if base and cand:
+        entrada.append(f"- **Medición:** aciertos {base['aciertos']}/{base['total']} → "
+                       f"{cand['aciertos']}/{cand['total']} · tokens {base['tokens']} → "
+                       f"{cand['tokens']}")
+    if diff:
+        entrada.append("- **Diff:**\n```diff\n" + diff.strip()[:900] + "\n```")
+    with MEMORIA.open("a", encoding="utf-8") as f:
+        f.write("\n".join(entrada) + "\n")
+    git("add", str(MEMORIA.relative_to(REPO)).replace("\\", "/"))
+    git_commit(f"bitácora: {veredicto} — {razon[:60]}")
 
 
 def correr_suite(modelo_agente, reps, pausa):
@@ -106,13 +167,31 @@ def mutar_con_verbo(modelo_mutador, base):
     else:
         reporte += "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
 
+    memoria = leer_memoria()
+    bloque_memoria = (
+        "INTENTOS ANTERIORES (tu memoria; lo REVERTIDO ya se probó y no funcionó, "
+        "no lo repitas ni lo deshagas):\n\n" + memoria + "\n\n"
+    ) if memoria else ""
+
     prompt = (
         "Estás mejorando TU PROPIO código fuente: el archivo verbo.py de este directorio "
         "es el agente que sos vos. Este es el reporte de tu última evaluación:\n\n"
         f"{reporte}\n\n"
-        "Leé verbo.py y aplicá UNA mejora mínima y conservadora que ataque la causa "
-        "de las fallas (o que reduzca consumo de tokens si no hay fallas). Típicamente: "
-        "una regla nueva en el prompt de sistema, o un manejo de error más robusto.\n"
+        f"{bloque_memoria}"
+        "Leé verbo.py y aplicá UNA mejora que ataque la causa de las fallas (o que "
+        "reduzca el consumo de tokens si no hay fallas). Para aceptarse tiene que "
+        "hacer pasar al menos 2 tareas más de forma sostenida, o ahorrar más del 10% "
+        "de tokens: un retoque cosmético no alcanza. Podés cambiar el prompt de "
+        "sistema, el loop agéntico, la validación de las herramientas o agregar un "
+        "paso de verificación — siempre que sea coherente y esté acotado a un cambio.\n"
+        "PROHIBIDO hacer trampa contra tu propia evaluación: no metas en el prompt "
+        "de sistema ni en el código respuestas específicas de las tareas que fallaron "
+        "(del tipo 'devolvé tuplas' o 'filtrá los negativos'). Eso sube el puntaje "
+        "sin mejorar al agente, y lo empeora para cualquier otro trabajo. La mejora "
+        "tiene que ser general: valer para tareas que nunca viste.\n"
+        "Trabajá SOBRE verbo.py: no explores ni leas las tareas de evals/, no podés "
+        "modificarlas y ahí no está la mejora. Tenés pocos turnos: leé verbo.py, "
+        "decidí el cambio y aplicalo.\n"
         "Reglas estrictas: usá la herramienta editar (no reescribas el archivo entero); "
         "NO toques ningún otro archivo; NO cambies la interfaz de línea de comandos; "
         "NO agregues dependencias. La herramienta editar valida la sintaxis de Python "
@@ -127,8 +206,14 @@ def mutar_con_verbo(modelo_mutador, base):
     print("  --- mutador (salida completa) ---")
     print("  " + "\n  ".join(salida.splitlines()))
     print("  --- fin mutador ---")
-    lineas = [l for l in salida.splitlines()
-              if l.strip() and not l.startswith(("[verbo-stats]", "  →", "  -", "VERBO ·"))]
+    # Se filtra por el texto YA sin sangría: VERBO imprime las herramientas
+    # como "  → nombre", sus resultados como "    ← resumen" y los detalles de
+    # edición como "    - buscar:". Filtrar por el string crudo dejaba pasar
+    # esas líneas y la "razón" del commit terminaba siendo un output de tool.
+    ruido = ("→", "←", "- buscar:", "- reemplazar:", "[verbo-stats]",
+             "[límite", "[tool call", "[VERBO", "VERBO ·")
+    lineas = [l.strip() for l in salida.splitlines()
+              if l.strip() and not l.strip().startswith(ruido)]
     return lineas[-1][:100] if lineas else "mejora automática"
 
 
@@ -203,6 +288,9 @@ def main():
 
         cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
         intrusos = sorted(f for f in nuevos if not f.startswith("evals/resultados-"))
+        # Se captura ANTES de revertir: es lo que hace que la memoria sirva
+        # (saber qué línea se tocó, no solo la explicación del modelo).
+        diff = git("diff", "--", "verbo.py").stdout
         if not cambiados and not intrusos:
             # Distinto de "tocó lo prohibido": el mutador simplemente no logró
             # editar nada (se quedó sin cupo, no encontró el texto exacto, o
@@ -211,17 +299,22 @@ def main():
             print("[evolucion] el mutador no produjo ninguna edición; "
                   "no hay candidato que evaluar")
             revertir(nuevos)
+            registrar("SIN MUTACIÓN", razon, "")
             continue
         if cambiados != ["verbo.py"] or intrusos:
             print(f"[evolucion] el mutador tocó archivos prohibidos (diff={cambiados}, "
                   f"nuevos={intrusos}); revert total")
             revertir(nuevos)
+            registrar("REVERTIDA (tocó archivos prohibidos)",
+                      f"{razon} [tocó: {cambiados + intrusos}]", diff)
             continue
 
         ok, err_compilacion = compila()
         if not ok:
             print(f"[evolucion] el candidato no compila; revert. {err_compilacion.strip()[:200]}")
             revertir(nuevos)
+            registrar("REVERTIDA (no compila)",
+                      f"{razon} [{err_compilacion.strip()[:120]}]", diff)
             continue
 
         print("[evolucion] evaluando candidato...")
@@ -231,16 +324,18 @@ def main():
 
         if es_mejor(cand, base, args.repeticiones):
             git("add", "verbo.py")
-            git("commit", "-m",
+            git_commit(
                 f"auto-iteración: {razon}\n\n"
                 f"Fitness: {base['aciertos']}/{base['total']} ({base['tokens']} tok) -> "
                 f"{cand['aciertos']}/{cand['total']} ({cand['tokens']} tok)\n\n"
                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
             print("[evolucion] MEJORA ACEPTADA — commit hecho")
+            registrar("ACEPTADA", razon, diff, base, cand)
             base = cand
         else:
             git("checkout", "--", "verbo.py")
             print("[evolucion] sin mejora — revert")
+            registrar("REVERTIDA (no superó el fitness)", razon, diff, base, cand)
 
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
 
