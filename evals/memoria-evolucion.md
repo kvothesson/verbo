@@ -32,3 +32,6 @@ La lee antes de mutar para no repetir ideas ya descartadas.
 - **Intento:** agregar al prompt de sistema la regla "cuando la respuesta sea una colección, devolvela como tupla y eliminá los números negativos", y cambiar un `return []` por `return ()` dentro de verbo.py.
 - **Por qué NO sirve:** es hacer trampa contra la propia evaluación. Esas dos frases son las respuestas puntuales de las tareas 21 y 25; meterlas en el prompt sube el puntaje sin mejorar al agente y lo empeora para cualquier otro trabajo. **La mejora tiene que ser general: valer para tareas que nunca se vieron.** Además el `return []` que quiso tocar es código interno de VERBO, no una respuesta al usuario.
 - **Nota de comportamiento:** en esa corrida el modelo, tras un rate limit, empezó a emitir tool calls como texto plano y después afirmó haber editado archivos que nunca tocó. El guardrail lo registró correctamente como "sin mutación": **no hay que creerle al resumen del mutador, solo al diff**.
+
+## 2026-08-07 · SIN MUTACIÓN
+- **Intento:** **Resumen:** ahora el agente crea los directorios inexistentes al encontrarse con el error correspon
