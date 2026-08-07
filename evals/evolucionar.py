@@ -138,9 +138,30 @@ def compila():
     return r.returncode == 0, r.stderr
 
 
-def es_mejor(cand, base):
-    if cand["aciertos"] != base["aciertos"]:
-        return cand["aciertos"] > base["aciertos"]
+# La suite no es determinista: con las tareas de BigCodeBench, una misma
+# versión de verbo.py osciló entre 7/13 y 9/13 en días distintos. Aceptar
+# cualquier +1 de aciertos con una sola corrida es aceptar RUIDO — así la
+# evolución hizo tres commits en 17 días tocando la misma línea de ida y
+# vuelta, con saldo neto cero. El margen exige que la mejora supere la
+# varianza observada; correr con -r 3 la reduce y hace el margen alcanzable.
+# Se escala con las repeticiones: con -r 3 los aciertos se cuentan sobre 39
+# corridas en vez de 13, así que un "+2" absoluto sería una vara MÁS BLANDA.
+# El margen se expresa en tareas-equivalente para que exigir lo mismo cueste
+# lo mismo con cualquier -r.
+MARGEN_POR_TAREA = 2  # tareas de ventaja mínima para creerle a una mejora
+
+
+def es_mejor(cand, base, reps=1):
+    delta = cand["aciertos"] - base["aciertos"]
+    # Con una sola corrida no hay forma de separar señal de ruido: el swing
+    # observado con código idéntico fue de 2 tareas, el margen entero. Por eso
+    # una mejora de aciertos solo se cree con al menos 2 repeticiones.
+    if reps >= 2 and delta >= MARGEN_POR_TAREA * reps:
+        return True
+    if delta < 0:
+        return False
+    # Empate (o mejora dentro del ruido): solo se acepta si además no perdió
+    # aciertos y ahorra tokens de forma contundente.
     return cand["tokens"] < base["tokens"] * 0.9
 
 
@@ -181,9 +202,19 @@ def main():
         nuevos = archivos_sin_trackear() - untracked_antes
 
         cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
-        if cambiados != ["verbo.py"] or any(not f.startswith("evals/resultados-") for f in nuevos):
+        intrusos = sorted(f for f in nuevos if not f.startswith("evals/resultados-"))
+        if not cambiados and not intrusos:
+            # Distinto de "tocó lo prohibido": el mutador simplemente no logró
+            # editar nada (se quedó sin cupo, no encontró el texto exacto, o
+            # agotó sus turnos). Sin esta rama el caso se reportaba como una
+            # violación de guardrail y ocultaba que la mutación nunca ocurrió.
+            print("[evolucion] el mutador no produjo ninguna edición; "
+                  "no hay candidato que evaluar")
+            revertir(nuevos)
+            continue
+        if cambiados != ["verbo.py"] or intrusos:
             print(f"[evolucion] el mutador tocó archivos prohibidos (diff={cambiados}, "
-                  f"nuevos={sorted(nuevos)}); revert total")
+                  f"nuevos={intrusos}); revert total")
             revertir(nuevos)
             continue
 
@@ -198,7 +229,7 @@ def main():
         print(f"[evolucion] candidato: {cand['aciertos']}/{cand['total']} · {cand['tokens']} tokens "
               f"(baseline: {base['aciertos']}/{base['total']} · {base['tokens']})")
 
-        if es_mejor(cand, base):
+        if es_mejor(cand, base, args.repeticiones):
             git("add", "verbo.py")
             git("commit", "-m",
                 f"auto-iteración: {razon}\n\n"

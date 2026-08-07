@@ -15,7 +15,7 @@ permissions:
 jobs:
   evolucionar:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180   # -r 3 triplica el trabajo: 2 suites x 13 tareas x 3
     steps:
       - uses: actions/checkout@v7
 
@@ -31,12 +31,14 @@ jobs:
           git config user.name "Kvothesson"
           git config user.email "kvothesson@users.noreply.github.com"
 
+      # -r 3: la suite no es determinista. Con una sola corrida el ruido
+      # (±2 tareas) supera la señal y la evolución acepta cambios al azar.
       - name: evolucionar (1 iteración diaria)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python evals/evolucionar.py --iteraciones 1 -r 1 --pausa 20
+        run: python evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20
 
       - name: pushear mejoras aceptadas
         run: git push
