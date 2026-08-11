@@ -58,3 +58,33 @@ index ac75d33..1d5c92f 100644
 
 ## 2026-08-10 · SIN MUTACIÓN
 - **Intento:** mejora automática
+
+## 2026-08-11 · REVERTIDA (no superó el fitness)
+- **Intento:** mejora automática
+- **Medición:** aciertos 28/39 → 27/39 · tokens 314439 → 326527
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index ac75d33..efc5ba3 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -440,7 +440,18 @@ def turno(estado, mensajes, auto):
+         msg = respuesta.choices[0].message
+ 
+         if not msg.tool_calls:
+-            print(f"\n{msg.content or '(sin respuesta)'}")
++            # Intentar normalizar la salida si es una literal Python
++            try:
++                import ast
++                literal = ast.literal_eval(msg.content or "")
++                if isinstance(literal, list):
++                    literal = tuple(literal)
++                    msg_content = str(literal)
++                else:
++                    msg_content = msg.content
++            except Exception:
++                msg_content = msg.content
++            print(f"\n{msg_content or '(sin respuesta)'}")
+             mensajes.append({"role": "assistant", "content": msg.content or ""})
+       
+```
