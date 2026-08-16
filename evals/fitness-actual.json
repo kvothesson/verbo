@@ -1,0 +1,60 @@
+{
+ "aciertos": 26,
+ "total": 39,
+ "tokens": 300116,
+ "fallas": [
+  {
+   "tarea": "21-bigcodebench-854",
+   "detalle": "Traceback (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/21-bigcodebench-854/verificar.py\", line 4, in <module>\n    from solucion import *\nModuleNotFoundError: No module named 'solucion'"
+  },
+  {
+   "tarea": "23-bigcodebench-777",
+   "detalle": "Traceback (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/23-bigcodebench-777/verificar.py\", line 4, in <module>\n    from solucion import *\nModuleNotFoundError: No module named 'solucion'"
+  },
+  {
+   "tarea": "23-bigcodebench-777",
+   "detalle": "Traceback (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/23-bigcodebench-777/verificar.py\", line 4, in <module>\n    from solucion import *\nModuleNotFoundError: No module named 'solucion'"
+  },
+  {
+   "tarea": "24-bigcodebench-771",
+   "detalle": "g, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/mnt/data/test_data/Shan-1.csv'\n\n----------------------------------------------------------------------\nRan 5 tests in 0.028s\n\nFAILED (errors=2)"
+  },
+  {
+   "tarea": "24-bigcodebench-771",
+   "detalle": "tEqual(result_files, expected_files)\nAssertionError: Lists differ: [] != ['Shan.csv']\n\nSecond list contains 1 additional elements.\nFirst extra element 0:\n'Shan.csv'\n\n- []\n+ ['Shan.csv']\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (failures=3)"
+  },
+  {
+   "tarea": "24-bigcodebench-771",
+   "detalle": "Traceback (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/24-bigcodebench-771/verificar.py\", line 4, in <module>\n    from solucion import *\nModuleNotFoundError: No module named 'solucion'"
+  },
+  {
+   "tarea": "25-bigcodebench-310",
+   "detalle": "Traceback (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/25-bigcodebench-310/verificar.py\", line 4, in <module>\n    from solucion import *\nModuleNotFoundError: No module named 'solucion'"
+  },
+  {
+   "tarea": "25-bigcodebench-310",
+   "detalle": "ists differ: [50.2, 172.3, 85.3] != [50.19, 172.337, 85.326]\n\nFirst differing element 0:\n50.2\n50.19\n\n- [50.2, 172.3, 85.3]\n?     ^\n\n+ [50.19, 172.337, 85.326]\n?     ^^       ++      ++\n\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (failures=1)"
+  },
+  {
+   "tarea": "25-bigcodebench-310",
+   "detalle": "r: Lists differ: [45.52, 169.71, 84.49] != [45.52, 169.71, 84.492]\n\nFirst differing element 2:\n84.49\n84.492\n\n- [45.52, 169.71, 84.49]\n+ [45.52, 169.71, 84.492]\n?                      +\n\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (failures=1)"
+  },
+  {
+   "tarea": "26-bigcodebench-988",
+   "detalle": " \"/tmp/verbo-eval-26-bigcodebench-988-2gzv1nwe/solucion.py\", line 27, in task_func\n    raise ValueError(\"No valid predicates are provided.\")\nValueError: No valid predicates are provided.\n\n----------------------------------------------------------------------\nRan 12 tests in 0.006s\n\nFAILED (errors=9)"
+  },
+  {
+   "tarea": "26-bigcodebench-988",
+   "detalle": "^^^\n  File \"/tmp/verbo-eval-26-bigcodebench-988-md3sh48e/solucion.py\", line 63, in task_func\n    raise ValueError(\"No valid predicates provided\")\nValueError: No valid predicates provided\n\n----------------------------------------------------------------------\nRan 12 tests in 0.006s\n\nFAILED (errors=9)"
+  },
+  {
+   "tarea": "26-bigcodebench-988",
+   "detalle": "File \"/home/runner/work/verbo/verbo/evals/tareas/26-bigcodebench-988/verificar.py\", line 39, in helper_assert_predicate\n    self.assertTrue(\nAssertionError: False is not true\n\n----------------------------------------------------------------------\nRan 12 tests in 0.006s\n\nFAILED (failures=3, errors=7)"
+  },
+  {
+   "tarea": "27-edicion-sin-cadaveres",
+   "detalle": "st recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/27-edicion-sin-cadaveres/verificar.py\", line 11, in <module>\n    assert str(p.imagen()) != antes, \"rotar() no cambia la imagen (pieza I)\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: rotar() no cambia la imagen (pieza I)"
+  }
+ ],
+ "medido": "2026-08-16"
+}

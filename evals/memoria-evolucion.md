@@ -103,3 +103,29 @@ index ac75d33..efc5ba3 100644
 - **Las corridas del 15 y del 16 fallaron en rojo por lo mismo**, pero en vez de rendirse rápido el mutador esperó cupo hasta chocar el timeout de 600s. Ese `TimeoutExpired` no estaba capturado: mataba el script y esos dos días no dejaron ni entrada acá.
 - **Qué cambió:** (1) se muta ANTES de medir y la suite se paga sólo si hubo mutación, así un día sin candidato no quema nada; (2) el timeout del mutador es un veredicto anotado, no un crash; (3) el mutador usa cerebras y la suite se queda con groq/openrouter, así dejan de competir por el mismo cupo. El fitness de referencia queda cacheado en `evals/fitness-actual.json`, commiteado, porque el runner es efímero.
 - **Lo que NO se ablandó:** cuando hay candidato, baseline y candidato se siguen midiendo los dos en la misma corrida. El cacheado sólo alimenta el reporte de fallas del prompt, nunca el juicio.
+
+## 2026-08-16 · SIN MUTACIÓN (timeout del mutador)
+- **Intento:** sin explicación del mutador
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index ac75d33..52d4cc8 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -99,7 +99,7 @@ MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
+ 
+ MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
+ MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
+-MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
++MAX_TURNOS = 30                 # iteraciones del loop agéntico por pedido
+ 
+ HERRAMIENTAS = [
+     {"type": "function", "function": {
+@@ -440,6 +440,10 @@ def turno(estado, mensajes, auto):
+         msg = respuesta.choices[0].message
+ 
+         if not msg.tool_calls:
++            # Si la respuesta contiene código Python con la función esperada y aún no existe 'solucion.py', crearla.
++            if 'def task_func' in (msg.content or '') and not Path('solucion.py').exists():
++  
+```
