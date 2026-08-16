@@ -9,12 +9,15 @@ mínima usando sus herramientas (leer/editar). Esto es mucho más robusto que
 pedir parches "a ciegas" a un modelo: el agente ve el texto exacto del código.
 
 Loop por iteración:
-  1. correr la suite (baseline)
-  2. VERBO se auto-edita guiado por el reporte de fallas Y por su bitácora
+  1. VERBO se auto-edita guiado por el fitness cacheado Y por su bitácora
+  2. si no editó nada, se corta acá: sin candidato no se gasta un token
   3. guardrails: solo verbo.py puede cambiar + py_compile
-  4. correr la suite de nuevo (candidato)
+  4. correr la suite dos veces, sin mutar y mutado (baseline y candidato)
   5. si el fitness mejora -> git commit; si no -> git checkout (revert)
   6. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
+
+Se muta ANTES de medir a propósito: la suite y el mutador comen del mismo
+cupo gratis, y medir primero dejaba al mutador sin nada con qué trabajar.
 
 Fitness: aciertos con margen sobre la varianza, después frugalidad de tokens.
 
@@ -35,6 +38,7 @@ Uso:
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -56,6 +60,23 @@ LOG = AQUI / "evolucion.log"
 MEMORIA = AQUI / "memoria-evolucion.md"
 MEMORIA_ENTRADAS = 12      # cuántos intentos pasados ve el mutador
 MEMORIA_CHARS = 5000       # tope de contexto que se le dedica a la memoria
+
+# Último fitness medido, commiteado al repo porque el runner de Actions es
+# efímero: sin esto, cada día arranca sin saber cómo le fue al código actual
+# y hay que volver a medirlo antes de poder mutar.
+FITNESS = AQUI / "fitness-actual.json"
+
+# El mutador y la suite competían por el MISMO cupo gratis. La suite corría
+# primero, se comía ~295k tokens del día, y el mutador arrancaba con groq y
+# cerebras ya enfriados: 1286s de espera contra los 120s de MAX_ESPERA_GLOBAL,
+# así que abandonaba sin editar una línea. Cinco "SIN MUTACIÓN" seguidos no
+# fueron falta de ideas, fue falta de cupo. Ahora cada uno tiene su proveedor.
+CADENA_EVALS = ("groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
+                "groq/openai/gpt-oss-20b,openrouter/openai/gpt-oss-20b:free")
+MODELO_MUTADOR_DEFAULT = "cerebras/gpt-oss-120b"   # 1M tokens/día, sin tarjeta
+CADENA_MUTADOR = "groq/openai/gpt-oss-120b"        # último recurso, no primario
+
+TIMEOUT_MUTADOR = 600      # segundos; agotarlo es un veredicto, no un crash
 
 
 class Tee:
@@ -111,6 +132,26 @@ def leer_memoria():
     return texto.strip()
 
 
+def leer_fitness():
+    """Fitness de la última medición, o None si nunca se midió."""
+    if not FITNESS.is_file():
+        return None
+    try:
+        return json.loads(FITNESS.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def guardar_fitness(datos):
+    """Guarda la medición para que mañana el mutador tenga el reporte de fallas
+    sin pagar la suite de nuevo. Lo commitea registrar(), junto con la bitácora."""
+    from datetime import datetime
+    FITNESS.write_text(
+        json.dumps({**datos, "medido": f"{datetime.now():%Y-%m-%d}"},
+                   ensure_ascii=False, indent=1),
+        encoding="utf-8")
+
+
 def registrar(veredicto, razon, diff, base=None, cand=None):
     """Anota el intento en la bitácora y la commitea. Se llama SIEMPRE, incluso
     cuando no hubo mutación o se revirtió: el valor está justamente en recordar
@@ -132,7 +173,9 @@ def registrar(veredicto, razon, diff, base=None, cand=None):
         entrada.append("- **Diff:**\n```diff\n" + diff.strip()[:900] + "\n```")
     with MEMORIA.open("a", encoding="utf-8") as f:
         f.write("\n".join(entrada) + "\n")
-    git("add", str(MEMORIA.relative_to(REPO)).replace("\\", "/"))
+    for archivo in (MEMORIA, FITNESS):
+        if archivo.is_file():
+            git("add", str(archivo.relative_to(REPO)).replace("\\", "/"))
     git_commit(f"bitácora: {veredicto} — {razon[:60]}")
 
 
@@ -140,8 +183,12 @@ def correr_suite(modelo_agente, reps, pausa):
     cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps), "--pausa", str(pausa)]
     if modelo_agente:
         cmd += ["-m", modelo_agente]
+    # correr_evals.py hereda el entorno y verbo.py lee VERBO_FALLBACKS: acá se
+    # le recorta cerebras a la suite para que el cupo del mutador quede intacto.
+    entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, encoding="utf-8", errors="replace", bufsize=1) as p:
+                          text=True, encoding="utf-8", errors="replace", bufsize=1,
+                          env=entorno) as p:
         for linea in p.stdout:
             print("  " + linea.rstrip())
     archivos = sorted(AQUI.glob("resultados-*.json"))
@@ -159,7 +206,10 @@ def correr_suite(modelo_agente, reps, pausa):
 
 
 def mutar_con_verbo(modelo_mutador, base):
-    """VERBO se edita a sí mismo guiado por el reporte de la suite."""
+    """VERBO se edita a sí mismo guiado por el reporte de la suite.
+
+    Devuelve (razón, se_venció_el_timeout).
+    """
     reporte = f"aciertos: {base['aciertos']}/{base['total']} · tokens totales: {base['tokens']}\n"
     if base["fallas"]:
         reporte += "FALLAS OBSERVADAS:\n" + "\n".join(
@@ -198,11 +248,24 @@ def mutar_con_verbo(modelo_mutador, base):
         "automáticamente: si te devuelve error, tu edición no se aplicó — corregila y "
         "reintentá hasta que aplique. Al final explicá la mejora en una línea."
     )
-    r = subprocess.run(
-        [sys.executable, str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador, "-p", prompt],
-        cwd=REPO, capture_output=True, text=True, timeout=600,
-        encoding="utf-8", errors="replace")
-    salida = (r.stdout or "").strip()
+    cmd = [sys.executable, str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
+           "--fallback", CADENA_MUTADOR, "-p", prompt]
+    vencido = False
+    try:
+        r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
+                           timeout=TIMEOUT_MUTADOR, encoding="utf-8", errors="replace")
+        salida = (r.stdout or "").strip()
+    except subprocess.TimeoutExpired as e:
+        # Que el mutador se quede esperando cupo es un resultado posible, no un
+        # error del harness. Sin este except la excepción mataba la corrida
+        # entera: la Action quedaba en rojo y el día no dejaba ni una línea en
+        # la bitácora (pasó el 15 y el 16 de agosto de 2026).
+        vencido = True
+        parcial = e.stdout or ""
+        if isinstance(parcial, bytes):
+            parcial = parcial.decode("utf-8", "replace")
+        salida = parcial.strip()
+        print(f"  [mutador] se venció el timeout de {TIMEOUT_MUTADOR}s")
     print("  --- mutador (salida completa) ---")
     print("  " + "\n  ".join(salida.splitlines()))
     print("  --- fin mutador ---")
@@ -214,7 +277,9 @@ def mutar_con_verbo(modelo_mutador, base):
              "[límite", "[tool call", "[VERBO", "VERBO ·")
     lineas = [l.strip() for l in salida.splitlines()
               if l.strip() and not l.strip().startswith(ruido)]
-    return lineas[-1][:100] if lineas else "mejora automática"
+    # "mejora automática" es el fallback cuando el mutador no llegó a explicar
+    # nada: si murió por cupo o por timeout no hay última línea que rescatar.
+    return (lineas[-1][:100] if lineas else "sin explicación del mutador"), vencido
 
 
 def compila():
@@ -262,8 +327,9 @@ def main():
     parser.add_argument("--iteraciones", type=int, default=1)
     parser.add_argument("--modelo-agente", default=None,
                         help="Modelo que usa VERBO en los evals (default: el de verbo.py)")
-    parser.add_argument("--modelo-mutador", default="groq/openai/gpt-oss-120b",
-                        help="Modelo con el que VERBO se auto-edita")
+    parser.add_argument("--modelo-mutador", default=MODELO_MUTADOR_DEFAULT,
+                        help="Modelo con el que VERBO se auto-edita (proveedor "
+                             "distinto al de la suite: no comparten cupo)")
     parser.add_argument("-r", "--repeticiones", type=int, default=1)
     parser.add_argument("--pausa", type=int, default=15)
     args = parser.parse_args()
@@ -276,14 +342,25 @@ def main():
     from datetime import datetime
     print(f"\n===== evolución {datetime.now():%Y-%m-%d %H:%M:%S} · "
           f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} =====")
-    print(f"[evolucion] baseline con agente={args.modelo_agente or '(default)'}")
-    base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
-    print(f"[evolucion] baseline: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
+    # Se muta PRIMERO y la suite se paga sólo si hubo mutación. El reporte de
+    # fallas que guía al mutador sale del fitness cacheado: no hace falta que
+    # sea de hoy (las fallas vivas son las mismas hace semanas), y medirlo antes
+    # de mutar costaba el cupo entero del día justo antes del único paso que
+    # hace avanzar el proyecto. El juicio no se ablanda: cuando hay candidato,
+    # baseline y candidato se miden los dos en esta misma corrida.
+    base = leer_fitness()
+    if base is None:
+        print("[evolucion] no hay fitness cacheado: se mide el baseline una vez")
+        base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
+        guardar_fitness(base)
+    print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
+          f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
+    medido_en_esta_corrida = False
 
     for i in range(1, args.iteraciones + 1):
         print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {args.modelo_mutador}")
         untracked_antes = archivos_sin_trackear()
-        razon = mutar_con_verbo(args.modelo_mutador, base)
+        razon, vencido = mutar_con_verbo(args.modelo_mutador, base)
         nuevos = archivos_sin_trackear() - untracked_antes
 
         cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
@@ -291,6 +368,14 @@ def main():
         # Se captura ANTES de revertir: es lo que hace que la memoria sirva
         # (saber qué línea se tocó, no solo la explicación del modelo).
         diff = git("diff", "--", "verbo.py").stdout
+        if vencido:
+            # Se revierte aunque haya alcanzado a editar: lo cortaron a mitad de
+            # camino, no es un cambio que el mutador haya dado por terminado.
+            print("[evolucion] el mutador se quedó sin tiempo; no hay candidato "
+                  "que evaluar")
+            revertir(nuevos)
+            registrar("SIN MUTACIÓN (timeout del mutador)", razon, diff)
+            continue
         if not cambiados and not intrusos:
             # Distinto de "tocó lo prohibido": el mutador simplemente no logró
             # editar nada (se quedó sin cupo, no encontró el texto exacto, o
@@ -317,6 +402,21 @@ def main():
                       f"{razon} [{err_compilacion.strip()[:120]}]", diff)
             continue
 
+        # Hay candidato: recién ahora se gasta cupo en medir. El baseline se
+        # mide con el código SIN mutar, así que la mutación se guarda aparte
+        # y se repone después: comparar contra un número de otro día sería
+        # medir la deriva del proveedor, no el efecto del cambio.
+        if not medido_en_esta_corrida:
+            fuente_candidato = ARCHIVO_VERBO.read_text(encoding="utf-8")
+            git("checkout", "--", "verbo.py")
+            print("[evolucion] midiendo baseline (verbo.py sin mutar)...")
+            base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
+            print(f"[evolucion] baseline: {base['aciertos']}/{base['total']} · "
+                  f"{base['tokens']} tokens")
+            ARCHIVO_VERBO.write_text(fuente_candidato, encoding="utf-8")
+            guardar_fitness(base)
+            medido_en_esta_corrida = True
+
         print("[evolucion] evaluando candidato...")
         cand = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
         print(f"[evolucion] candidato: {cand['aciertos']}/{cand['total']} · {cand['tokens']} tokens "
@@ -330,6 +430,9 @@ def main():
                 f"{cand['aciertos']}/{cand['total']} ({cand['tokens']} tok)\n\n"
                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
             print("[evolucion] MEJORA ACEPTADA — commit hecho")
+            # Antes de registrar: registrar() es quien commitea el fitness, y
+            # todavía necesita el base viejo para anotar la medición del salto.
+            guardar_fitness(cand)
             registrar("ACEPTADA", razon, diff, base, cand)
             base = cand
         else:

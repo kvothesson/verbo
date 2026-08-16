@@ -97,3 +97,9 @@ index ac75d33..efc5ba3 100644
 
 ## 2026-08-14 · SIN MUTACIÓN
 - **Intento:** mejora automática
+
+## 2026-08-16 · NOTA DEL MANTENIMIENTO (no es un intento del mutador)
+- **Los cinco "SIN MUTACIÓN" del 10 al 14 de agosto no fueron falta de ideas, fue falta de cupo.** La suite corría primero y se comía ~295k tokens del día contra los mismos modelos que después necesitaba el mutador. En el log del 14 se ve entero: el mutador arranca, groq ya está enfriando 1286s, cae a cerebras, también enfriando, y abandona porque `MAX_ESPERA_GLOBAL` son 120s. Alcanzó a leer verbo.py y nada más.
+- **Las corridas del 15 y del 16 fallaron en rojo por lo mismo**, pero en vez de rendirse rápido el mutador esperó cupo hasta chocar el timeout de 600s. Ese `TimeoutExpired` no estaba capturado: mataba el script y esos dos días no dejaron ni entrada acá.
+- **Qué cambió:** (1) se muta ANTES de medir y la suite se paga sólo si hubo mutación, así un día sin candidato no quema nada; (2) el timeout del mutador es un veredicto anotado, no un crash; (3) el mutador usa cerebras y la suite se queda con groq/openrouter, así dejan de competir por el mismo cupo. El fitness de referencia queda cacheado en `evals/fitness-actual.json`, commiteado, porque el runner es efímero.
+- **Lo que NO se ablandó:** cuando hay candidato, baseline y candidato se siguen midiendo los dos en la misma corrida. El cacheado sólo alimenta el reporte de fallas del prompt, nunca el juicio.
