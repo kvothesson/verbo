@@ -76,7 +76,12 @@ CADENA_EVALS = ("groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
 MODELO_MUTADOR_DEFAULT = "cerebras/gpt-oss-120b"   # 1M tokens/día, sin tarjeta
 CADENA_MUTADOR = "groq/openai/gpt-oss-120b"        # último recurso, no primario
 
-TIMEOUT_MUTADOR = 600      # segundos; agotarlo es un veredicto, no un crash
+# 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
+# servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
+# 10 minutos no le alcanzan para leer verbo.py entero, decidir y editar (run 38,
+# 2026-08-16: se comió los 600s sin llegar a nada). El workflow corta a los 180
+# min y el peor caso acá es mutador + dos suites, así que hay lugar de sobra.
+TIMEOUT_MUTADOR = 2400     # segundos; agotarlo es un veredicto, no un crash
 
 
 class Tee:
@@ -248,7 +253,12 @@ def mutar_con_verbo(modelo_mutador, base):
         "automáticamente: si te devuelve error, tu edición no se aplicó — corregila y "
         "reintentá hasta que aplique. Al final explicá la mejora en una línea."
     )
-    cmd = [sys.executable, str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
+    # -u a propósito: con el stdout del hijo bufferado, matarlo por timeout se
+    # lleva puesto todo lo que escribió y no flusheó. En el run 38 eso dejó la
+    # sección del mutador COMPLETAMENTE vacía, que es la peor evidencia posible
+    # justo en el caso que hay que diagnosticar. Sin buffer, lo que alcanzó a
+    # hacer queda en el log aunque lo corten a mitad.
+    cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
            "--fallback", CADENA_MUTADOR, "-p", prompt]
     vencido = False
     try:
