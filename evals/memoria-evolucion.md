@@ -134,3 +134,6 @@ index ac75d33..52d4cc8 100644
 - Primera corrida con el orden nuevo: verde, baseline 26/39 con 300116 tokens, fitness cacheado. El timeout quedó anotado como veredicto en vez de tirar la corrida abajo, que era la mitad del arreglo.
 - **Pero el mutador volvió a agotar el tiempo, ahora trabajando de verdad.** Los 600s eran de cuando arrancaba sin cupo y moría rápido: servían de corte de pérdidas, no de presupuesto. Con cerebras propio no le alcanzan para leer verbo.py, decidir y editar. Van a 2400s, que entran holgados en los 180 min del workflow.
 - La sección del mutador salió VACÍA, que es la peor evidencia posible justo en el caso a diagnosticar: el stdout del hijo estaba bufferado y matarlo se llevó todo lo que no había flusheado. Se lanza con `python -u`. Verificado: sin `-u` se rescata `''`, con `-u` se rescatan las líneas.
+
+## 2026-08-17 · SIN MUTACIÓN
+- **Intento:** We'll fetch full content, then apply Python replace.{"ruta":"verbo.py","desde":1,"hasta":600}(large 
