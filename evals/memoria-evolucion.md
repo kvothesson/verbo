@@ -137,3 +137,6 @@ index ac75d33..52d4cc8 100644
 
 ## 2026-08-17 · SIN MUTACIÓN
 - **Intento:** We'll fetch full content, then apply Python replace.{"ruta":"verbo.py","desde":1,"hasta":600}(large 
+
+## 2026-08-18 · SIN MUTACIÓN
+- **Intento:** sin explicación del mutador
