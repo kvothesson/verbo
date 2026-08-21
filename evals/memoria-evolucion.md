@@ -146,3 +146,6 @@ index ac75d33..52d4cc8 100644
 
 ## 2026-08-20 · SIN MUTACIÓN
 - **Intento:** sin explicación del mutador
+
+## 2026-08-21 · SIN MUTACIÓN
+- **Intento:** sin explicación del mutador
