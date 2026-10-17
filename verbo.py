@@ -35,7 +35,7 @@ except Exception:
     pass
 
 try:
-    from openai import OpenAI, RateLimitError, BadRequestError
+    from openai import OpenAI, RateLimitError, BadRequestError, APIStatusError
 except ImportError:
     print("Falta el paquete 'openai'. Instalalo con: pip install openai")
     sys.exit(1)
@@ -405,9 +405,23 @@ def llamar_con_reintentos(estado, mensajes):
                           "probando el siguiente]")
                     continue
                 raise
+            except APIStatusError as e:
+                # Key inválida, cupo que pasó a ser pago, sin permiso o modelo
+                # dado de baja: no se arregla esperando, así que este modelo
+                # queda fuera de la sesión. Cerebras empezó a devolver 402 el
+                # 2026-08-18 y esto tumbaba el proceso entero en vez de pasar
+                # al siguiente de la cadena.
+                if e.status_code not in (401, 402, 403, 404):
+                    raise
+                ENFRIAMIENTOS[modelo_completo] = float("inf")
+                print(f"  [{modelo_completo} rechazó la llamada ({e.status_code}); "
+                      "probando el siguiente]")
         # Ningún modelo disponible ahora: esperar al que se libere antes.
         proximo = min((ENFRIAMIENTOS.get(m, 0) for m in estado["modelos"]),
                       default=float("inf")) - time.time()
+        if proximo == float("inf"):
+            raise SystemExit("ERROR: ningún modelo de la cadena está disponible "
+                             "(sin key o rechazado por el proveedor; ver arriba).")
         if proximo > MAX_ESPERA_GLOBAL:
             raise SystemExit("ERROR: todos los modelos de la cadena agotaron su límite "
                              f"de tasa y el próximo cupo tarda {proximo / 60:.0f} min. "

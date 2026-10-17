@@ -73,8 +73,11 @@ FITNESS = AQUI / "fitness-actual.json"
 # fueron falta de ideas, fue falta de cupo. Ahora cada uno tiene su proveedor.
 CADENA_EVALS = ("groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
                 "groq/openai/gpt-oss-20b,openrouter/openai/gpt-oss-20b:free")
-MODELO_MUTADOR_DEFAULT = "cerebras/gpt-oss-120b"   # 1M tokens/día, sin tarjeta
-CADENA_MUTADOR = "groq/openai/gpt-oss-120b"        # último recurso, no primario
+# Cerebras era el primario hasta que su tier gratis empezó a devolver 402
+# (2026-08-18). groq/openai/gpt-oss-120b sigue teniendo cupo propio: los
+# límites de Groq son por modelo y CADENA_EVALS no lo usa.
+MODELO_MUTADOR_DEFAULT = "groq/openai/gpt-oss-120b"
+CADENA_MUTADOR = "cerebras/gpt-oss-120b"   # si vuelve el cupo gratis; si no, se saltea
 
 # 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
 # servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
