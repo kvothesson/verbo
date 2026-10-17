@@ -16,9 +16,13 @@ Loop por corrida:
   2. si no editó nada, se corta acá: sin candidato no se gasta un token
   3. guardrails: solo verbo.py, py_compile, y solo dentro del genoma (que
      tiene que seguir siendo un literal válido y con límites)
-  4. filtro barato: una corrida sobre las tareas que el baseline fallaba más
-     el canario; si no resuelve nada nuevo ni ahorra tokens, se descarta
-  5. correr la suite dos veces, sin mutar y mutado (baseline y candidato)
+  4. filtro barato: baseline y candidato, una corrida intercalada sobre las
+     tareas que el baseline venía fallando más el canario; si el candidato no
+     resuelve nada nuevo ni ahorra tokens, se descarta
+  5. suite completa con baseline y candidato INTERCALADOS por tarea (medidos
+     en bloque, el segundo heredaba un cupo gastado); los pares en que
+     cualquiera se quedó sin cupo se descartan juntos, y con menos del 75%
+     de pares válidos no se decide nada
   6. si el fitness mejora -> git commit; si no -> git checkout (revert)
   7. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
 
@@ -47,6 +51,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -237,25 +242,72 @@ def correr_suite(modelo_agente, reps, pausa, tareas=None):
                           env=entorno) as p:
         for linea in p.stdout:
             print("  " + linea.rstrip())
+    return resumir(next(iter(ultimos_resultados().values())))
+
+
+def ultimos_resultados():
     archivos = sorted(AQUI.glob("resultados-*.json"))
     if not archivos:
         raise SystemExit("la suite no generó resultados")
-    datos = json.loads(archivos[-1].read_text(encoding="utf-8"))
-    resultados = next(iter(datos.values()))
+    return json.loads(archivos[-1].read_text(encoding="utf-8"))
+
+
+def resumir(resultados):
+    """De la lista por tarea de correr_evals.py al fitness. Los aciertos se
+    recuentan desde las corridas porque comparar_suite puede haber sacado
+    algunas."""
+    tareas = [t for t in resultados if t["corridas"]]
     return {
-        "aciertos": sum(t["aciertos"] for t in resultados),
-        "total": sum(len(t["corridas"]) for t in resultados),
-        "tokens": sum(c["tokens"] for t in resultados for c in t["corridas"]),
+        "aciertos": sum(c["paso"] for t in tareas for c in t["corridas"]),
+        "total": sum(len(t["corridas"]) for t in tareas),
+        "tokens": sum(c["tokens"] for t in tareas for c in t["corridas"]),
         "fallas": [{"tarea": t["tarea"], "detalle": c["detalle"][:400]}
-                   for t in resultados for c in t["corridas"] if not c["paso"]],
-        # Por tarea, para que el filtro barato compare contra el baseline sin
-        # volver a medirlo.
-        "por_tarea": {t["tarea"]: {"aciertos": t["aciertos"],
+                   for t in tareas for c in t["corridas"] if not c["paso"]],
+        # Por tarea: el filtro elige con esto qué tareas son duras.
+        "por_tarea": {t["tarea"]: {"aciertos": sum(c["paso"] for c in t["corridas"]),
                                    "corridas": len(t["corridas"]),
                                    "tokens": sum(c["tokens"] for c in t["corridas"])
-                                   // max(1, len(t["corridas"]))}
-                      for t in resultados},
+                                   // len(t["corridas"])}
+                      for t in tareas},
     }
+
+
+# Una comparación con muchos pares sin cupo no mide al agente, mide el día del
+# proveedor: por debajo de esto no se decide nada.
+MIN_FRACCION_VALIDA = 0.75
+
+
+def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
+    """Mide el verbo.py actual (candidato) contra `referencia` (baseline)
+    intercalados por tarea, para que los dos gasten el mismo cupo. Los pares
+    en que cualquiera de los dos se quedó sin cupo se descartan juntos: así
+    el que tuvo mala suerte con el proveedor no pierde puntos.
+    Devuelve (base, cand, fracción de pares válidos)."""
+    cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps),
+           "--pausa", str(pausa), "--contra", str(referencia)]
+    if modelo_agente:
+        cmd += ["-m", modelo_agente]
+    for tarea in tareas or []:
+        cmd += ["--tarea", tarea]
+    entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, encoding="utf-8", errors="replace", bufsize=1,
+                          env=entorno) as p:
+        for linea in p.stdout:
+            print("  " + linea.rstrip())
+    datos = ultimos_resultados()
+    if set(datos) != {"verbo", "contra"}:
+        raise SystemExit("la comparación no generó resultados")
+    validos = total = 0
+    filtrados = {"verbo": [], "contra": []}
+    for t_cand, t_base in zip(datos["verbo"], datos["contra"]):
+        pares = list(zip(t_cand["corridas"], t_base["corridas"]))
+        buenos = [(c, b) for c, b in pares if not c.get("sin_cupo") and not b.get("sin_cupo")]
+        total += len(pares)
+        validos += len(buenos)
+        filtrados["verbo"].append({"tarea": t_cand["tarea"], "corridas": [c for c, _ in buenos]})
+        filtrados["contra"].append({"tarea": t_base["tarea"], "corridas": [b for _, b in buenos]})
+    return resumir(filtrados["contra"]), resumir(filtrados["verbo"]), validos / max(1, total)
 
 
 def chequear_proveedores(modelos):
@@ -507,7 +559,9 @@ def es_mejor(cand, base, reps=1):
     delta = cand["aciertos"] - base["aciertos"]
     # Con una sola corrida no hay forma de separar señal de ruido: el swing
     # observado con código idéntico fue de 2 tareas, el margen entero. Por eso
-    # una mejora de aciertos solo se cree con al menos 2 repeticiones.
+    # una mejora de aciertos solo se cree con al menos 2 repeticiones. Si se
+    # descartaron pares sin cupo el margen NO se achica: menos corridas es más
+    # ruido, y ablandar la vara justo ahí sería aceptar suerte.
     if reps >= 2 and delta >= MARGEN_POR_TAREA * reps:
         return True
     if delta < 0:
@@ -572,7 +626,7 @@ def main():
         guardar_fitness(base)
     print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
           f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
-    medido_en_esta_corrida = False
+    sin_cupo = False
     fallo_el_mutador = False
 
     for i in range(1, args.iteraciones + 1):
@@ -636,39 +690,50 @@ def main():
             registrar("REVERTIDA (genoma inválido)", f"{razon} [{motivo}]", diff)
             continue
 
-        # Filtro barato: una corrida sobre lo que el baseline fallaba. La gran
-        # mayoría de las mutaciones no mueve nada, y descubrirlo con la suite
-        # completa costaba el cupo de un día entero.
+        # El baseline es verbo.py tal como está commiteado, en una carpeta
+        # aparte: así baseline y candidato corren intercalados en la misma
+        # comparación y comparten el desgaste del cupo. (Fuera del repo para
+        # no dejar un archivo sin trackear; las keys llegan por el entorno.)
+        referencia = Path(tempfile.mkdtemp(prefix="verbo-baseline-")) / "verbo.py"
+        referencia.write_text(git("show", "HEAD:verbo.py").stdout, encoding="utf-8")
+
+        # Filtro barato: una corrida intercalada sobre lo que el baseline venía
+        # fallando. La gran mayoría de las mutaciones no mueve nada, y
+        # descubrirlo con la suite completa costaba el cupo de un día entero.
         tareas = tareas_del_filtro(base)
-        print(f"[evolucion] filtro barato: {len(tareas)} tareas x1 ({', '.join(tareas)})")
-        filtro = correr_suite(args.modelo_agente, 1, args.pausa, tareas)
-        paso, detalle = pasa_el_filtro(filtro, base)
+        print(f"[evolucion] filtro barato: {len(tareas)} tareas x1, intercalado "
+              f"({', '.join(tareas)})")
+        base_f, cand_f, valida = comparar_suite(args.modelo_agente, 1, args.pausa,
+                                                referencia, tareas)
+        if valida < MIN_FRACCION_VALIDA:
+            print(f"[evolucion] filtro sin cupo ({valida:.0%} de pares válidos); no se decide")
+            git("checkout", "--", "verbo.py")
+            registrar("SIN CUPO PARA MEDIR", f"{razon} [filtro: {valida:.0%} de pares válidos]", diff)
+            sin_cupo = True
+            continue
+        paso, detalle = pasa_el_filtro(cand_f, base_f)
         print(f"[evolucion] filtro: {'PASA' if paso else 'NO PASA'} — {detalle} "
-              f"({filtro['aciertos']}/{filtro['total']} · {filtro['tokens']} tokens)")
+              f"(candidato {cand_f['aciertos']}/{cand_f['total']} · {cand_f['tokens']} tok, "
+              f"baseline {base_f['aciertos']}/{base_f['total']} · {base_f['tokens']} tok)")
         if not paso:
             git("checkout", "--", "verbo.py")
-            registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff)
+            registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff, base_f, cand_f)
             continue
 
-        # Hay candidato: recién ahora se gasta cupo en medir. El baseline se
-        # mide con el código SIN mutar, así que la mutación se guarda aparte
-        # y se repone después: comparar contra un número de otro día sería
-        # medir la deriva del proveedor, no el efecto del cambio.
-        if not medido_en_esta_corrida:
-            fuente_candidato = ARCHIVO_VERBO.read_text(encoding="utf-8")
-            git("checkout", "--", "verbo.py")
-            print("[evolucion] midiendo baseline (verbo.py sin mutar)...")
-            base = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
-            print(f"[evolucion] baseline: {base['aciertos']}/{base['total']} · "
-                  f"{base['tokens']} tokens")
-            ARCHIVO_VERBO.write_text(fuente_candidato, encoding="utf-8")
-            guardar_fitness(base)
-            medido_en_esta_corrida = True
-
-        print("[evolucion] evaluando candidato...")
-        cand = correr_suite(args.modelo_agente, args.repeticiones, args.pausa)
+        print("[evolucion] suite completa, intercalada...")
+        nueva_base, cand, valida = comparar_suite(args.modelo_agente, args.repeticiones,
+                                                  args.pausa, referencia)
         print(f"[evolucion] candidato: {cand['aciertos']}/{cand['total']} · {cand['tokens']} tokens "
-              f"(baseline: {base['aciertos']}/{base['total']} · {base['tokens']})")
+              f"(baseline: {nueva_base['aciertos']}/{nueva_base['total']} · "
+              f"{nueva_base['tokens']}) · {valida:.0%} de pares válidos")
+        if valida < MIN_FRACCION_VALIDA:
+            git("checkout", "--", "verbo.py")
+            registrar("SIN CUPO PARA MEDIR", f"{razon} [suite: {valida:.0%} de pares válidos]",
+                      diff, nueva_base, cand)
+            sin_cupo = True
+            continue
+        base = nueva_base
+        guardar_fitness(base)
 
         if es_mejor(cand, base, args.repeticiones):
             git("add", "verbo.py")
@@ -691,6 +756,10 @@ def main():
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
     if fallo_el_mutador:
         sys.exit("[evolucion] el mutador falló: ver su stderr arriba")
+    if sin_cupo:
+        # En rojo a propósito: un día sin cupo para medir es un problema de
+        # capacidad (sumar proveedores), no un veredicto sobre el agente.
+        sys.exit("[evolucion] no hubo cupo para medir: hacen falta más proveedores")
 
 
 if __name__ == "__main__":

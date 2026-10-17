@@ -36,7 +36,12 @@ TAREAS = AQUI / "tareas"
 TIMEOUT_TAREA = 300
 
 
-def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False):
+# Lo que imprime verbo.py cuando no le queda ningún modelo con cupo: una
+# corrida así no dice nada del agente, solo del proveedor.
+SENIALES_SIN_CUPO = ("agotaron su límite de tasa", "ningún modelo de la cadena está disponible")
+
+
+def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo: Path = VERBO):
     prompt = (tarea / "prompt.txt").read_text(encoding="utf-8").strip()
     sandbox = Path(tempfile.mkdtemp(prefix=f"verbo-eval-{tarea.name}-"))
     setup = tarea / "setup"
@@ -44,7 +49,7 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False):
         for archivo in setup.iterdir():
             shutil.copy(archivo, sandbox / archivo.name)
 
-    cmd = [sys.executable, str(VERBO), "--auto", "-p", prompt]
+    cmd = [sys.executable, str(verbo), "--auto", "-p", prompt]
     if modelo:
         cmd += ["-m", modelo]
     if puro:
@@ -84,8 +89,9 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False):
     if pausa:
         time.sleep(pausa)
 
+    sin_cupo = not paso and any(s in salida_agente for s in SENIALES_SIN_CUPO)
     return {"tarea": tarea.name, "paso": paso, "segundos": round(duracion, 1),
-            **stats, "detalle": "" if paso else verificacion[-300:]}
+            **stats, "sin_cupo": sin_cupo, "detalle": "" if paso else verificacion[-300:]}
 
 
 def main():
@@ -101,6 +107,9 @@ def main():
     parser.add_argument("--puro", action="store_true",
                         help="Desactiva la cadena de fallbacks: mide cada modelo aislado "
                              "(sin esto, un 429 haría que otro modelo resuelva la tarea)")
+    parser.add_argument("--contra", type=Path,
+                        help="Otro verbo.py contra el que comparar: cada corrida de cada "
+                             "tarea se mide con los dos seguidos, alternando quién va primero")
     args = parser.parse_args()
 
     modelos = args.modelo or [None]  # None = default de verbo.py
@@ -110,6 +119,10 @@ def main():
         if faltan:
             sys.exit(f"No existe la tarea: {', '.join(sorted(faltan))}")
         tareas = [t for t in tareas if t.name in args.tarea]
+
+    if args.contra:
+        guardar(comparar(tareas, modelos[0], args))
+        return
 
     todos = {}
     for modelo in modelos:
@@ -139,10 +152,52 @@ def main():
         tokens = sum(c["tokens"] for r in resultados for c in r["corridas"])
         print(f"  TOTAL: {total_ok}/{total} PASS ({100 * total_ok / total:.0f}%) · {tokens} tokens")
         todos[etiqueta] = resultados
+    guardar(todos)
 
+
+def guardar(datos):
     archivo = AQUI / f"resultados-{datetime.now():%Y%m%d-%H%M%S}.json"
-    archivo.write_text(json.dumps(todos, indent=2, ensure_ascii=False), encoding="utf-8")
+    archivo.write_text(json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nResultados guardados en {archivo.name}")
+
+
+def comparar(tareas, modelo, args):
+    """Mide verbo.py y --contra intercalados: cada corrida de cada tarea va con
+    los dos seguidos, y el que arranca se alterna. Medidos en bloque, el
+    segundo heredaba un cupo ya gastado: en el run 38994268353 el baseline se
+    llevó el día y el candidato falló 13 tareas en menos de un segundo cada
+    una. Así los dos pagan el mismo desgaste del cupo."""
+    lados = {"verbo": VERBO, "contra": args.contra.resolve()}
+    resultados = {lado: [] for lado in lados}
+    print(f"\n=== Comparando verbo.py contra {args.contra.name} — {len(tareas)} tareas "
+          f"x{args.repeticiones}, intercalado ===")
+    for tarea in tareas:
+        print(f"  {tarea.name} ... ", end="", flush=True)
+        corridas = {lado: [] for lado in lados}
+        for i in range(args.repeticiones):
+            orden = ["verbo", "contra"] if i % 2 == 0 else ["contra", "verbo"]
+            for lado in orden:
+                es_ultima = (tarea == tareas[-1] and i == args.repeticiones - 1
+                             and lado == orden[-1])
+                res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
+                                   puro=args.puro, verbo=lados[lado])
+                corridas[lado].append(res)
+            print("".join("-" if r["sin_cupo"] else ("P" if r["paso"] else "F")
+                          for r in (corridas["verbo"][-1], corridas["contra"][-1])) + " ",
+                  end="", flush=True)
+        print()
+        for lado in lados:
+            for r in corridas[lado]:
+                if not r["paso"] and r["detalle"]:
+                    print(f"      [{lado}] motivo: {r['detalle'][-200:]}")
+            resultados[lado].append({"tarea": tarea.name,
+                                     "aciertos": sum(r["paso"] for r in corridas[lado]),
+                                     "corridas": corridas[lado]})
+    for lado in lados:
+        ok = sum(t["aciertos"] for t in resultados[lado])
+        total = sum(len(t["corridas"]) for t in resultados[lado])
+        print(f"  {lado}: {ok}/{total} PASS")
+    return resultados
 
 
 if __name__ == "__main__":
