@@ -86,7 +86,8 @@ CADENA_EVALS = ("groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
 # la suite completa solo corre si el candidato lo pasó; si el principal se
 # agota, la suite sigue con CADENA_EVALS.
 MODELO_MUTADOR_DEFAULT = "groq/openai/gpt-oss-120b"
-CADENA_MUTADOR = "cerebras/gpt-oss-120b"   # si vuelve el cupo gratis; si no, se saltea
+# gpt-oss-20b tiene cupo propio en Groq (los límites son por modelo).
+CADENA_MUTADOR = "groq/openai/gpt-oss-20b,cerebras/gpt-oss-120b"
 MODELO_SUITE = "groq/openai/gpt-oss-120b"  # el default de verbo.py
 
 # El genoma es lo único que el mutador puede tocar (ver el bloque en verbo.py).
@@ -417,8 +418,8 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
         "PROHIBIDO hacer trampa: nada de respuestas específicas de las tareas que "
         "fallaron (del tipo 'devolvé tuplas' o 'filtrá los negativos'). La mejora "
         "tiene que valer para tareas que nunca viste.\n"
-        "Cómo trabajar: NO leas ni busques archivos, ya tenés todo el texto arriba. "
-        "Hacé UNA llamada a 'editar' sobre verbo.py, con 'buscar' copiado EXACTO de "
+        "Cómo trabajar: tu única herramienta es 'editar', y ya tenés todo el texto "
+        "arriba. Hacé UNA llamada a 'editar' sobre verbo.py, con 'buscar' copiado EXACTO de "
         "una parte del genoma (por ejemplo una regla entera, o la línea de 'cierre'). "
         "El genoma tiene que seguir siendo un literal de Python con las mismas claves. "
         "Si 'editar' devuelve error, corregí y reintentá. Al final explicá la mejora "
@@ -429,8 +430,11 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
     # sección del mutador COMPLETAMENTE vacía, que es la peor evidencia posible
     # justo en el caso que hay que diagnosticar. Sin buffer, lo que alcanzó a
     # hacer queda en el log aunque lo corten a mitad.
+    # Solo 'editar': pedirle por prompt que no explorara no alcanzó (run
+    # 38992832585: leyó verbo.py tres veces, buscó cuatro y chocó el 413).
     cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
-           "--fallback", ",".join(cadena_mutador), "-p", prompt]
+           "--fallback", ",".join(cadena_mutador), "--herramientas", "editar",
+           "-p", prompt]
     vencido = False
     error = None
     errores = ""

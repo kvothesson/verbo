@@ -409,7 +409,8 @@ def llamar_con_reintentos(estado, mensajes):
             client, modelo = par
             try:
                 respuesta = client.chat.completions.create(
-                    model=modelo, messages=mensajes, tools=HERRAMIENTAS,
+                    model=modelo, messages=mensajes,
+                    tools=estado.get("herramientas", HERRAMIENTAS),
                     temperature=GENOMA["temperatura"])
                 ESTADISTICAS["llamadas"] += 1
                 ESTADISTICAS["por_modelo"][modelo_completo] = \
@@ -477,9 +478,11 @@ def turno(estado, mensajes, auto):
                 motivo = str(e).replace("\n", " ")[:180]
                 print(f"  [tool call inválido del modelo; corrigiendo... ({motivo})]")
                 time.sleep(2)
+                nombres = [h["function"]["name"]
+                           for h in estado.get("herramientas", HERRAMIENTAS)]
                 mensajes.append({"role": "user", "content":
                     "[sistema] Tu llamada a herramienta fue inválida. Las únicas herramientas "
-                    "disponibles son: leer, escribir, editar, ejecutar, buscar. Reintentá."})
+                    f"disponibles son: {', '.join(nombres)}. Reintentá."})
                 continue
             raise
         msg = respuesta.choices[0].message
@@ -512,7 +515,12 @@ def turno(estado, mensajes, auto):
                 args = {}
             detalle = args.get("comando") or args.get("ruta") or args.get("texto") or ""
             print(f"  → {tc.function.name}: {detalle}")
-            resultado = ejecutar_herramienta(tc.function.name, args, auto)
+            permitidas = {h["function"]["name"] for h in estado.get("herramientas", HERRAMIENTAS)}
+            if tc.function.name in permitidas:
+                resultado = ejecutar_herramienta(tc.function.name, args, auto)
+            else:
+                resultado = (f"ERROR: la herramienta '{tc.function.name}' no está disponible "
+                             f"en esta sesión. Usá: {', '.join(sorted(permitidas))}")
             # Feedback: resumen de qué devolvió la herramienta, para que el
             # usuario vea el progreso (o el error) sin leer el historial.
             lineas = resultado.strip().splitlines() or [""]
@@ -570,6 +578,9 @@ def main():
     parser.add_argument("--chequear", action="store_true",
                         help="Prueba cada modelo de la cadena con una llamada mínima y sale "
                              "(exit 0 si al menos uno responde)")
+    parser.add_argument("--herramientas", default="",
+                        help="Limitar las herramientas disponibles, separadas por coma "
+                             "(ej: 'leer,editar'). Vacío = todas.")
     args = parser.parse_args()
 
     cargar_env()
@@ -580,6 +591,17 @@ def main():
         resultados = chequear(cadena)
         for modelo_completo, estado, detalle in resultados:
             print(f"[chequeo] {estado:<9} {modelo_completo}  {detalle}".rstrip())
+        # Un 404 dice que el modelo ya no existe, no cuál lo reemplaza: listar
+        # lo que ofrece hoy cada proveedor de la cadena da con qué rearmarla.
+        for proveedor in dict.fromkeys(m.split("/", 1)[0] for m in cadena):
+            par = cliente_para(f"{proveedor}/")
+            if par is None:
+                continue
+            try:
+                ids = sorted(m.id for m in par[0].models.list())
+                print(f"[modelos] {proveedor}: {', '.join(ids)}")
+            except Exception as e:
+                print(f"[modelos] {proveedor}: no se pudo listar ({type(e).__name__})")
         sys.exit(0 if any(estado == "OK" for _, estado, _ in resultados) else 1)
 
     partes = args.modelo.split("/", 1)
@@ -594,6 +616,13 @@ def main():
     cadena = [args.modelo] + [m.strip() for m in args.fallback.split(",")
                               if m.strip() and m.strip() != args.modelo]
     estado = {"modelos": cadena}
+    if args.herramientas:
+        pedidas = [h.strip() for h in args.herramientas.split(",") if h.strip()]
+        desconocidas = set(pedidas) - {h["function"]["name"] for h in HERRAMIENTAS}
+        if desconocidas:
+            print(f"Herramientas desconocidas: {', '.join(sorted(desconocidas))}")
+            sys.exit(1)
+        estado["herramientas"] = [h for h in HERRAMIENTAS if h["function"]["name"] in pedidas]
     par = cliente_para(args.modelo)
     modelo = par[1] if par else args.modelo
     mensajes = [{"role": "system", "content": prompt_sistema()}]
