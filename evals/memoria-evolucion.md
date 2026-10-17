@@ -326,3 +326,22 @@ index ac75d33..52d4cc8 100644
 
 ## 2026-10-17 · FALLÓ EL MUTADOR
 - **Intento:** exit 1: ERROR: ningún modelo de la cadena está disponible (sin key o rechazado por el proveedor; ver arriba).
+
+## 2026-10-17 · DESCARTADA EN EL FILTRO
+- **Intento:** Se incrementó **MAX_TURNOS** de 20 a 30 en el genoma para permitir más iteraciones del bucle agente  [no resolvió ninguna tarea que fallaba ni ahorró tokens]
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index ca418eb..b9bfe66 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -122,7 +122,7 @@ GENOMA = {
+         "ejecutar": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+         "buscar": "Busca texto literal en los archivos de un directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+     },
+-    "max_turnos": 20,                  # iteraciones del loop agéntico por pedido
++    "max_turnos": 30,                  # iteraciones del loop agéntico por pedido
+     "max_salida_herramienta": 6000,    # chars que se devuelven al modelo por herramienta
+     "max_contexto_chars": 60000,       # umbral para compactar historial
+     "temperatura": 0.2,
+```
