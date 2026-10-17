@@ -7,7 +7,13 @@ name: evolucion-diaria
 on:
   schedule:
     - cron: "0 13 * * *"   # 10:00 Argentina (UTC-3)
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "evolucion = corrida completa · chequeo = solo probar proveedores (casi sin cupo)"
+        type: choice
+        options: [evolucion, chequeo]
+        default: evolucion
 
 permissions:
   contents: write
@@ -34,14 +40,26 @@ jobs:
       # -r 3: la suite no es determinista. Con una sola corrida el ruido
       # (±2 tareas) supera la señal y la evolución acepta cambios al azar.
       - name: evolucionar (1 iteración diaria)
+        if: inputs.modo != 'chequeo'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20
 
+      # Una llamada mínima (con herramientas) a cada modelo de la cadena y el
+      # listado de lo que ofrece cada proveedor. Sirve para rearmar la cadena
+      # sin quemar el cupo del día en una evolución entera.
+      - name: chequear proveedores
+        if: inputs.modo == 'chequeo'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python verbo.py --chequear
+
       # También si la evolución terminó en rojo: la bitácora del fallo es
       # justamente lo que hay que conservar.
       - name: pushear mejoras aceptadas
-        if: success() || failure()
+        if: inputs.modo != 'chequeo' && (success() || failure())
         run: git push

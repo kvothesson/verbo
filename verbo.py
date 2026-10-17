@@ -83,16 +83,21 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0, "por_modelo": {}}
 
 # Los límites de Groq son POR MODELO: agotar gpt-oss-120b no toca el
 # presupuesto de llama ni el de qwen. Fallback = más presupuesto gratis.
-# Orden según benchmark aislado (14 tareas x 2, 2026-07-19):
-#   cerebras/gpt-oss-120b primero: mismo modelo que el primario, 96% de la
-#   suite y 1M tokens/día — capacidad extra sin perder calidad.
-#   qwen sobre llama-70b: 10/10 vs 7/8 en lo que el cupo dejó correr.
-#   llama-3.1-8b-instant EXCLUIDO: fallas de calidad reales y 6k TPM que no
-#   banca el contexto de tareas medianas; quemaba tiempo y entregaba basura.
-FALLBACKS_DEFAULT = ("cerebras/gpt-oss-120b,"
-                     "groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
-                     "groq/openai/gpt-oss-20b,"
-                     "openrouter/openai/gpt-oss-20b:free")
+# Rearmada el 2026-10-17 con el listado real de cada proveedor (verbo.py
+# --chequear lo imprime): qwen3.6-27b, llama-3.3-70b y el gpt-oss-20b:free de
+# OpenRouter ya no existen (404), y Cerebras pide pago (402). Orden:
+#   qwen3.8-27b primero: sucesor directo del qwen que en julio le ganaba a
+#   llama-70b (10/10 vs 7/8), con cupo propio en Groq.
+#   gpt-oss-20b: mismo estilo de tool calling que el primario.
+#   los :free de OpenRouter, del más grande al más chico; los que no soportan
+#   herramientas los descarta el chequeo (o el primer 4xx de la sesión).
+#   cerebras al final: si el tier gratis vuelve, se aprovecha solo.
+# Sin benchmark propio todavía: el orden es una apuesta a medir.
+FALLBACKS_DEFAULT = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
+                     "openrouter/nvidia/nemotron-3-super-120b-a12b:free,"
+                     "openrouter/poolside/laguna-s-2.1:free,"
+                     "openrouter/google/gemma-4-31b-it:free,"
+                     "cerebras/gpt-oss-120b")
 CLIENTES = {}
 ENFRIAMIENTOS = {}  # modelo -> timestamp hasta el cual no volver a intentarlo
 MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
@@ -550,16 +555,21 @@ def chequear(cadena):
             continue
         client, modelo = par
         try:
+            # Con las herramientas: un modelo que responde pero no sabe usar
+            # tools no le sirve a VERBO (en OpenRouter muchos :free no pueden).
             client.chat.completions.create(
                 model=modelo, messages=[{"role": "user", "content": "Respondé: ok"}],
-                max_tokens=16, timeout=30)
+                tools=HERRAMIENTAS, max_tokens=64, timeout=30)
             resultados.append((modelo_completo, "OK", ""))
         except RateLimitError as e:
             resultados.append((modelo_completo, "LIMITE",
                                f"cupo agotado, ~{_segundos_de_espera(str(e)):.0f}s"))
         except APIStatusError as e:
-            estado = "RECHAZADO" if e.status_code in (401, 402, 403, 404) else "ERROR"
-            resultados.append((modelo_completo, estado, f"HTTP {e.status_code}"))
+            sin_tools = "tool" in str(e).lower()
+            estado = ("RECHAZADO" if e.status_code in (401, 402, 403, 404) or sin_tools
+                      else "ERROR")
+            detalle = f"HTTP {e.status_code}" + (" (no soporta herramientas)" if sin_tools else "")
+            resultados.append((modelo_completo, estado, detalle))
         except Exception as e:
             resultados.append((modelo_completo, "ERROR", type(e).__name__))
     return resultados
