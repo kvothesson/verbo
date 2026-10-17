@@ -12,11 +12,17 @@ o no funciona.
 cd evals
 python correr_evals.py                                  # modelo default (Groq gratis)
 python correr_evals.py -m gemini/gemini-2.5-flash       # otro modelo
-python correr_evals.py -m groq/openai/gpt-oss-120b -m groq/llama-3.3-70b-versatile   # comparar
+python correr_evals.py -m groq/openai/gpt-oss-120b -m groq/qwen/qwen3.8-27b   # comparar
 python correr_evals.py --tarea 06-test-rojo             # una sola tarea
 python correr_evals.py --pausa 30                       # más espera entre tareas (límites TPM)
 python correr_evals.py -r 3                             # 3 corridas por tarea (varianza)
+python correr_evals.py -r 3 --contra /tmp/viejo/verbo.py  # A/B intercalado contra otra versión
 ```
+
+Con `--contra`, cada corrida de cada tarea se mide con las dos versiones
+seguidas, alternando cuál va primero, para que compartan el mismo desgaste del
+cupo gratis. Las corridas que murieron sin cupo quedan marcadas (`sin_cupo`) y
+la evolución descarta el par entero.
 
 Los agentes **no son deterministas**: la misma tarea puede salir bien o mal
 según el humor del sampling. Una corrida única es anécdota; `-r 3` da un pass
