@@ -269,6 +269,8 @@ def chequear_proveedores(modelos):
         if len(partes) >= 3 and partes[0] == "[chequeo]":
             estados[partes[2]] = partes[1]
             print("  " + linea)
+        elif linea.startswith("[modelos]"):
+            print("  " + linea)
     if r.returncode not in (0, 1) or not estados:
         print("  " + (r.stderr or "").strip().replace("\n", "\n  "))
     return estados
