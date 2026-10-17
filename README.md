@@ -61,6 +61,9 @@ python verbo.py -m ollama/qwen2.5-coder:7b -p "..."
 
 # Sin confirmación antes de cada comando (más fluido, más riesgo)
 python verbo.py --auto -p "..."
+
+# ¿Qué modelos de la cadena responden hoy? (una llamada mínima a cada uno)
+python verbo.py --chequear
 ```
 
 VERBO trabaja sobre **la carpeta donde estás parado**, y las keys las lee de
@@ -88,6 +91,24 @@ echo 'alias verbo="python /ruta/a/verbo.py"' >> ~/.bashrc
   límites de Groq son por modelo: la cadena multiplica el presupuesto gratis)
 - Auto-corrección: si el modelo alucina una herramienta inexistente, se lo señala y sigue
 - Compactación de contexto: descarta resultados viejos para no explotar los límites
+- Proveedores que cambian sin aviso: una key inválida, un tier gratis que pasa a
+  pago (402) o un pedido más grande que el límite por minuto (413) sacan a ese
+  modelo de la sesión y la cadena sigue con el próximo
+
+## Genoma y evolución
+
+Lo que define cómo se comporta VERBO — sus reglas, cómo se le describen las
+herramientas, sus presupuestos y un mensaje opcional de `cierre` que recibe
+antes de dar una tarea por terminada — vive en un solo bloque de `verbo.py`,
+entre `# >>> GENOMA` y `# <<< GENOMA`. Es un literal de Python: lo podés editar
+a mano sin entender el resto del archivo.
+
+Ese bloque es también lo único que puede tocar la evolución automática
+([`evals/evolucionar.py`](evals/evolucionar.py), una vez por día en GitHub
+Actions): VERBO propone un cambio a su propio genoma, un filtro barato lo
+prueba contra las tareas que venía fallando, y solo si promete se paga la
+suite completa para decidir si se queda. Cada intento, aceptado o no, queda en
+la [bitácora](evals/memoria-evolucion.md).
 
 ## Evals
 
@@ -113,7 +134,7 @@ cd evals && python correr_evals.py    # corrélo vos mismo, o compará modelos c
 
 No es Claude Code. No tiene sub-agentes, ni permisos finos, ni MCP, ni memoria
 persistente. Es el 20% de las funciones que resuelve el 80% de las tareas
-chicas y medianas — y es tuyo, legible, y modificable: son ~300 líneas de
+chicas y medianas — y es tuyo, legible, y modificable: son ~600 líneas de
 Python que podés leer entero en 10 minutos.
 
 ## Seguridad

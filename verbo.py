@@ -97,14 +97,49 @@ CLIENTES = {}
 ENFRIAMIENTOS = {}  # modelo -> timestamp hasta el cual no volver a intentarlo
 MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
 
-MAX_SALIDA_HERRAMIENTA = 6000   # chars que se devuelven al modelo por herramienta
-MAX_CONTEXTO_CHARS = 60000      # umbral para compactar historial
-MAX_TURNOS = 20                 # iteraciones del loop agéntico por pedido
+# El genoma es la parte del agente que la evolución puede cambiar: cómo se le
+# habla al modelo y con qué presupuestos trabaja. Todo lo demás (herramientas,
+# guardrails, proveedores) es el motor y lo mantiene un humano. Tiene que ser
+# un literal de Python puro: evals/evolucionar.py lo valida con
+# ast.literal_eval y rechaza cualquier edición fuera de estas dos marcas.
+# >>> GENOMA
+GENOMA = {
+    "reglas": [
+        "Antes de modificar un archivo existente, leelo.",
+        "Hacé el cambio mínimo necesario; preferí 'editar' sobre 'escribir' en archivos existentes.",
+        "Si un comando falla, leé el error y corregí. No repitas el mismo comando esperando otro resultado.",
+        "Verificá tu trabajo ejecutándolo cuando sea posible.",
+        "Respondé siempre en español, breve y directo. Al terminar, resumí qué hiciste en una o dos líneas.",
+        "Sé frugal con los tokens: no imprimas archivos enteros en tus respuestas ni repitas contenido que ya está en el historial.",
+        "Para crear o modificar archivos usá siempre 'escribir' o 'editar', nunca redirecciones de shell (> o >>): en Windows generan encodings rotos.",
+        "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+        "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
+    ],
+    "herramientas": {
+        "leer": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
+        "editar": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo entero.",
+        "ejecutar": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+        "buscar": "Busca texto literal en los archivos de un directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+    },
+    "max_turnos": 20,                  # iteraciones del loop agéntico por pedido
+    "max_salida_herramienta": 6000,    # chars que se devuelven al modelo por herramienta
+    "max_contexto_chars": 60000,       # umbral para compactar historial
+    "temperatura": 0.2,
+    # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+    # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+    "cierre": "",
+}
+# <<< GENOMA
+
+MAX_SALIDA_HERRAMIENTA = GENOMA["max_salida_herramienta"]
+MAX_CONTEXTO_CHARS = GENOMA["max_contexto_chars"]
+MAX_TURNOS = GENOMA["max_turnos"]
 
 HERRAMIENTAS = [
     {"type": "function", "function": {
         "name": "leer",
-        "description": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+        "description": GENOMA["herramientas"]["leer"],
         "parameters": {"type": "object", "properties": {
             "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"},
             "desde": {"type": "integer", "description": "Opcional: primera línea a leer (1 = principio)"},
@@ -112,14 +147,14 @@ HERRAMIENTAS = [
             "required": ["ruta"]}}},
     {"type": "function", "function": {
         "name": "escribir",
-        "description": "Crea o sobreescribe un archivo con el contenido dado.",
+        "description": GENOMA["herramientas"]["escribir"],
         "parameters": {"type": "object", "properties": {
             "ruta": {"type": "string"},
             "contenido": {"type": "string"}},
             "required": ["ruta", "contenido"]}}},
     {"type": "function", "function": {
         "name": "editar",
-        "description": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo entero.",
+        "description": GENOMA["herramientas"]["editar"],
         "parameters": {"type": "object", "properties": {
             "ruta": {"type": "string"},
             "buscar": {"type": "string", "description": "Texto exacto a encontrar (debe aparecer una sola vez)"},
@@ -127,13 +162,13 @@ HERRAMIENTAS = [
             "required": ["ruta", "buscar", "reemplazar"]}}},
     {"type": "function", "function": {
         "name": "ejecutar",
-        "description": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+        "description": GENOMA["herramientas"]["ejecutar"],
         "parameters": {"type": "object", "properties": {
             "comando": {"type": "string"}},
             "required": ["comando"]}}},
     {"type": "function", "function": {
         "name": "buscar",
-        "description": "Busca texto literal en los archivos de un directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+        "description": GENOMA["herramientas"]["buscar"],
         "parameters": {"type": "object", "properties": {
             "texto": {"type": "string"},
             "ruta": {"type": "string", "description": "Opcional: directorio donde buscar (default: el actual)"},
@@ -161,15 +196,7 @@ def prompt_sistema():
         "Tenés herramientas para leer, escribir, editar y buscar en archivos, y ejecutar comandos de shell. "
         "Usalas para completar la tarea de punta a punta: no describas lo que harías, hacelo.\n"
         "Reglas:\n"
-        "1. Antes de modificar un archivo existente, leelo.\n"
-        "2. Hacé el cambio mínimo necesario; preferí 'editar' sobre 'escribir' en archivos existentes.\n"
-        "3. Si un comando falla, leé el error y corregí. No repitas el mismo comando esperando otro resultado.\n"
-        "4. Verificá tu trabajo ejecutándolo cuando sea posible.\n"
-        "5. Respondé siempre en español, breve y directo. Al terminar, resumí qué hiciste en una o dos líneas.\n"
-        "6. Sé frugal con los tokens: no imprimas archivos enteros en tus respuestas ni repitas contenido que ya está en el historial.\n"
-        "7. Para crear o modificar archivos usá siempre 'escribir' o 'editar', nunca redirecciones de shell (> o >>): en Windows generan encodings rotos.\n"
-        "8. Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.\n"
-        "9. Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto."
+        + "\n".join(f"{i}. {regla}" for i, regla in enumerate(GENOMA["reglas"], 1))
     )
 
 
@@ -382,7 +409,8 @@ def llamar_con_reintentos(estado, mensajes):
             client, modelo = par
             try:
                 respuesta = client.chat.completions.create(
-                    model=modelo, messages=mensajes, tools=HERRAMIENTAS, temperature=0.2)
+                    model=modelo, messages=mensajes, tools=HERRAMIENTAS,
+                    temperature=GENOMA["temperatura"])
                 ESTADISTICAS["llamadas"] += 1
                 ESTADISTICAS["por_modelo"][modelo_completo] = \
                     ESTADISTICAS["por_modelo"].get(modelo_completo, 0) + 1
@@ -410,8 +438,10 @@ def llamar_con_reintentos(estado, mensajes):
                 # dado de baja: no se arregla esperando, así que este modelo
                 # queda fuera de la sesión. Cerebras empezó a devolver 402 el
                 # 2026-08-18 y esto tumbaba el proceso entero en vez de pasar
-                # al siguiente de la cadena.
-                if e.status_code not in (401, 402, 403, 404):
+                # al siguiente de la cadena. 413 es el pedido más grande que el
+                # límite por minuto del modelo (8k tokens en Groq gratis): el
+                # historial solo crece, así que tampoco va a entrar después.
+                if e.status_code not in (401, 402, 403, 404, 413):
                     raise
                 ENFRIAMIENTOS[modelo_completo] = float("inf")
                 print(f"  [{modelo_completo} rechazó la llamada ({e.status_code}); "
@@ -433,6 +463,7 @@ def llamar_con_reintentos(estado, mensajes):
 
 def turno(estado, mensajes, auto):
     """Un pedido del usuario: itera hasta que el modelo deja de pedir herramientas."""
+    cierre_pendiente = bool(GENOMA["cierre"])
     for _ in range(MAX_TURNOS):
         compactar(mensajes)
         try:
@@ -454,8 +485,12 @@ def turno(estado, mensajes, auto):
         msg = respuesta.choices[0].message
 
         if not msg.tool_calls:
-            print(f"\n{msg.content or '(sin respuesta)'}")
             mensajes.append({"role": "assistant", "content": msg.content or ""})
+            if cierre_pendiente:
+                cierre_pendiente = False
+                mensajes.append({"role": "user", "content": "[sistema] " + GENOMA["cierre"]})
+                continue
+            print(f"\n{msg.content or '(sin respuesta)'}")
             return
 
         # Feedback: si el modelo narra qué está por hacer, mostrarlo.
@@ -490,6 +525,38 @@ def turno(estado, mensajes, auto):
     print("\n[VERBO alcanzó el máximo de iteraciones para este pedido]")
 
 
+def chequear(cadena):
+    """Una llamada mínima a cada modelo para saber cuáles responden HOY.
+    Los tiers gratis cambian sin aviso (Cerebras pasó a 402 el 2026-08-18 y la
+    evolución estuvo dos meses muerta sin que nadie lo notara): esto lo
+    detecta en segundos y casi sin tokens. Devuelve [(modelo, estado, detalle)]
+    con estado OK, SIN_KEY, LIMITE, RECHAZADO o ERROR."""
+    resultados = []
+    for modelo_completo in cadena:
+        par = cliente_para(modelo_completo)
+        if par is None:
+            proveedor = modelo_completo.split("/", 1)[0]
+            detalle = ("proveedor desconocido" if proveedor not in PROVEEDORES
+                       else f"falta {PROVEEDORES[proveedor]['key_env']}")
+            resultados.append((modelo_completo, "SIN_KEY", detalle))
+            continue
+        client, modelo = par
+        try:
+            client.chat.completions.create(
+                model=modelo, messages=[{"role": "user", "content": "Respondé: ok"}],
+                max_tokens=16, timeout=30)
+            resultados.append((modelo_completo, "OK", ""))
+        except RateLimitError as e:
+            resultados.append((modelo_completo, "LIMITE",
+                               f"cupo agotado, ~{_segundos_de_espera(str(e)):.0f}s"))
+        except APIStatusError as e:
+            estado = "RECHAZADO" if e.status_code in (401, 402, 403, 404) else "ERROR"
+            resultados.append((modelo_completo, estado, f"HTTP {e.status_code}"))
+        except Exception as e:
+            resultados.append((modelo_completo, "ERROR", type(e).__name__))
+    return resultados
+
+
 def main():
     parser = argparse.ArgumentParser(description="VERBO — agente de código a costo cero")
     parser.add_argument("-p", "--prompt", help="Tarea única (sin esto, entra en modo interactivo)")
@@ -500,9 +567,20 @@ def main():
     parser.add_argument("--fallback", default=os.environ.get("VERBO_FALLBACKS", FALLBACKS_DEFAULT),
                         help="Modelos alternativos si el principal agota su rate limit, "
                              "separados por coma. '' para desactivar.")
+    parser.add_argument("--chequear", action="store_true",
+                        help="Prueba cada modelo de la cadena con una llamada mínima y sale "
+                             "(exit 0 si al menos uno responde)")
     args = parser.parse_args()
 
     cargar_env()
+
+    if args.chequear:
+        cadena = [args.modelo] + [m.strip() for m in args.fallback.split(",")
+                                  if m.strip() and m.strip() != args.modelo]
+        resultados = chequear(cadena)
+        for modelo_completo, estado, detalle in resultados:
+            print(f"[chequeo] {estado:<9} {modelo_completo}  {detalle}".rstrip())
+        sys.exit(0 if any(estado == "OK" for _, estado, _ in resultados) else 1)
 
     partes = args.modelo.split("/", 1)
     if partes[0] not in PROVEEDORES:

@@ -4,17 +4,23 @@ Auto-iteración de VERBO: el agente mejora su propio código, con la suite
 de evals como juez y git como red de seguridad.
 
 El mutador ES el propio VERBO: se lanza una instancia del agente sobre su
-propio repositorio con la instrucción de leer verbo.py y aplicar una mejora
-mínima usando sus herramientas (leer/editar). Esto es mucho más robusto que
-pedir parches "a ciegas" a un modelo: el agente ve el texto exacto del código.
+propio repositorio con el texto exacto de su GENOMA (el bloque delimitado de
+verbo.py con reglas, descripciones de herramientas y presupuestos) y la
+instrucción de editarlo. No lee archivos: todo el pedido tiene que entrar en
+los 8k tokens por minuto de Groq gratis.
 
-Loop por iteración:
-  1. VERBO se auto-edita guiado por el fitness cacheado Y por su bitácora
+Loop por corrida:
+  0. chequeo de proveedores: una llamada mínima a cada modelo; los que
+     rechazan quedan afuera y, si no queda ninguno, la corrida sale en rojo
+  1. VERBO edita su genoma guiado por el fitness cacheado Y por su bitácora
   2. si no editó nada, se corta acá: sin candidato no se gasta un token
-  3. guardrails: solo verbo.py puede cambiar + py_compile
-  4. correr la suite dos veces, sin mutar y mutado (baseline y candidato)
-  5. si el fitness mejora -> git commit; si no -> git checkout (revert)
-  6. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
+  3. guardrails: solo verbo.py, py_compile, y solo dentro del genoma (que
+     tiene que seguir siendo un literal válido y con límites)
+  4. filtro barato: una corrida sobre las tareas que el baseline fallaba más
+     el canario; si no resuelve nada nuevo ni ahorra tokens, se descarta
+  5. correr la suite dos veces, sin mutar y mutado (baseline y candidato)
+  6. si el fitness mejora -> git commit; si no -> git checkout (revert)
+  7. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
 
 Se muta ANTES de medir a propósito: la suite y el mutador comen del mismo
 cupo gratis, y medir primero dejaba al mutador sin nada con qué trabajar.
@@ -59,7 +65,7 @@ LOG = AQUI / "evolucion.log"
 # línea (agregar excepthook, comentarlo, descomentarlo) en 17 días.
 MEMORIA = AQUI / "memoria-evolucion.md"
 MEMORIA_ENTRADAS = 12      # cuántos intentos pasados ve el mutador
-MEMORIA_CHARS = 5000       # tope de contexto que se le dedica a la memoria
+MEMORIA_CHARS = 2500       # tope de contexto: todo el pedido tiene que entrar en 8k tokens
 
 # Último fitness medido, commiteado al repo porque el runner de Actions es
 # efímero: sin esto, cada día arranca sin saber cómo le fue al código actual
@@ -74,10 +80,32 @@ FITNESS = AQUI / "fitness-actual.json"
 CADENA_EVALS = ("groq/qwen/qwen3.6-27b,groq/llama-3.3-70b-versatile,"
                 "groq/openai/gpt-oss-20b,openrouter/openai/gpt-oss-20b:free")
 # Cerebras era el primario hasta que su tier gratis empezó a devolver 402
-# (2026-08-18). groq/openai/gpt-oss-120b sigue teniendo cupo propio: los
-# límites de Groq son por modelo y CADENA_EVALS no lo usa.
+# (2026-08-18). Ojo: groq/openai/gpt-oss-120b también es el modelo principal
+# de la suite (el default de verbo.py), así que vuelven a compartir cupo. Lo
+# que lo hace tolerable es el orden: se muta primero, el filtro gasta poco, y
+# la suite completa solo corre si el candidato lo pasó; si el principal se
+# agota, la suite sigue con CADENA_EVALS.
 MODELO_MUTADOR_DEFAULT = "groq/openai/gpt-oss-120b"
 CADENA_MUTADOR = "cerebras/gpt-oss-120b"   # si vuelve el cupo gratis; si no, se saltea
+MODELO_SUITE = "groq/openai/gpt-oss-120b"  # el default de verbo.py
+
+# El genoma es lo único que el mutador puede tocar (ver el bloque en verbo.py).
+# Los límites existen para que una mutación no pueda "ganar" rompiendo la
+# promesa del proyecto: un prompt chico que entra en los tiers gratis.
+MARCA_INICIO = "# >>> GENOMA\n"
+MARCA_FIN = "# <<< GENOMA\n"
+LIMITES_GENOMA = {
+    "max_turnos": (5, 60),
+    "max_salida_herramienta": (1000, 20000),
+    "max_contexto_chars": (20000, 200000),
+    "temperatura": (0.0, 1.0),
+}
+MAX_CHARS_TEXTO_GENOMA = 6000   # reglas + descripciones + cierre (~1.5k tokens)
+
+# Filtro barato: antes de pagar baseline + candidato completos (2 x 13 tareas
+# x -r), el candidato corre una vez sobre las tareas que el baseline fallaba
+# más el canario. Cuesta ~1/10 de una suite y descarta lo que no mueve nada.
+CANARIO = "01-crear-script"
 
 # 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
 # servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
@@ -130,6 +158,11 @@ def leer_memoria():
     if not MEMORIA.is_file():
         return ""
     entradas = [e for e in MEMORIA.read_text(encoding="utf-8").split("\n## ") if e.strip()]
+    # Los días en que no pasó nada no le enseñan nada al mutador, y con 60
+    # "SIN MUTACIÓN" seguidos tapaban todo lo que sí servía. Quedan los
+    # intentos con diff o medición y las notas del mantenimiento.
+    entradas = [e for e in entradas if "**Diff:**" in e or "**Medición:**" in e
+                or "NOTA DEL MANTENIMIENTO" in e or "Por qué NO sirve" in e]
     recientes = [e if e.startswith("## ") else "## " + e
                  for e in entradas[-MEMORIA_ENTRADAS:]][::-1]
     texto = ""
@@ -187,12 +220,14 @@ def registrar(veredicto, razon, diff, base=None, cand=None):
     git_commit(f"bitácora: {veredicto} — {razon[:60]}")
 
 
-def correr_suite(modelo_agente, reps, pausa):
+def correr_suite(modelo_agente, reps, pausa, tareas=None):
     cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps), "--pausa", str(pausa)]
     if modelo_agente:
         cmd += ["-m", modelo_agente]
-    # correr_evals.py hereda el entorno y verbo.py lee VERBO_FALLBACKS: acá se
-    # le recorta cerebras a la suite para que el cupo del mutador quede intacto.
+    for tarea in tareas or []:
+        cmd += ["--tarea", tarea]
+    # correr_evals.py hereda el entorno y verbo.py lee VERBO_FALLBACKS: la
+    # suite usa su propia cadena, ya filtrada por el chequeo de proveedores.
     entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -210,19 +245,153 @@ def correr_suite(modelo_agente, reps, pausa):
         "tokens": sum(c["tokens"] for t in resultados for c in t["corridas"]),
         "fallas": [{"tarea": t["tarea"], "detalle": c["detalle"][:400]}
                    for t in resultados for c in t["corridas"] if not c["paso"]],
+        # Por tarea, para que el filtro barato compare contra el baseline sin
+        # volver a medirlo.
+        "por_tarea": {t["tarea"]: {"aciertos": t["aciertos"],
+                                   "corridas": len(t["corridas"]),
+                                   "tokens": sum(c["tokens"] for c in t["corridas"])
+                                   // max(1, len(t["corridas"]))}
+                      for t in resultados},
     }
 
 
-def mutar_con_verbo(modelo_mutador, base):
-    """VERBO se edita a sí mismo guiado por el reporte de la suite.
+def chequear_proveedores(modelos):
+    """Corre verbo.py --chequear sobre todos los modelos que va a usar la
+    corrida. Devuelve {modelo: estado}."""
+    cmd = [sys.executable, str(ARCHIVO_VERBO), "--chequear",
+           "-m", modelos[0], "--fallback", ",".join(modelos[1:])]
+    r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
+                       timeout=600, encoding="utf-8", errors="replace")
+    estados = {}
+    for linea in (r.stdout or "").splitlines():
+        partes = linea.split()
+        if len(partes) >= 3 and partes[0] == "[chequeo]":
+            estados[partes[2]] = partes[1]
+            print("  " + linea)
+    if r.returncode not in (0, 1) or not estados:
+        print("  " + (r.stderr or "").strip().replace("\n", "\n  "))
+    return estados
+
+
+def utilizables(cadena, estados):
+    """Saca los modelos que no van a responder hoy. LIMITE se queda: el cupo
+    vuelve solo y verbo.py ya sabe esperarlo."""
+    return [m for m in cadena if estados.get(m, "OK") in ("OK", "LIMITE")]
+
+
+def extraer_genoma(fuente):
+    """(antes, bloque, después) del genoma, o None si las marcas no están
+    exactamente una vez cada una."""
+    fuente = fuente.replace("\r\n", "\n")
+    if fuente.count(MARCA_INICIO) != 1 or fuente.count(MARCA_FIN) != 1:
+        return None
+    i = fuente.index(MARCA_INICIO) + len(MARCA_INICIO)
+    j = fuente.index(MARCA_FIN)
+    if j < i:
+        return None
+    return fuente[:i], fuente[i:j], fuente[j:]
+
+
+def validar_genoma(fuente_vieja, fuente_nueva):
+    """None si la mutación se quedó dentro del genoma y el genoma es válido;
+    si no, el motivo del rechazo."""
+    import ast
+    vieja, nueva = extraer_genoma(fuente_vieja), extraer_genoma(fuente_nueva)
+    if nueva is None:
+        return "las marcas del genoma no están (o están repetidas)"
+    if vieja is None or (vieja[0], vieja[2]) != (nueva[0], nueva[2]):
+        return "editó código fuera del genoma"
+    try:
+        arbol = ast.parse(nueva[1])
+    except SyntaxError as e:
+        return f"el genoma no parsea (línea {e.lineno})"
+    if (len(arbol.body) != 1 or not isinstance(arbol.body[0], ast.Assign)
+            or [getattr(t, "id", None) for t in arbol.body[0].targets] != ["GENOMA"]):
+        return "el genoma tiene que ser una sola asignación GENOMA = {...}"
+    try:
+        genoma = ast.literal_eval(arbol.body[0].value)
+    except ValueError:
+        return "el genoma no es un literal puro (nada de llamadas ni variables)"
+    original = ast.literal_eval(ast.parse(vieja[1]).body[0].value)
+    if not isinstance(genoma, dict) or set(genoma) != set(original):
+        return f"el genoma tiene que tener exactamente las claves {sorted(original)}"
+    for clave, (minimo, maximo) in LIMITES_GENOMA.items():
+        valor = genoma[clave]
+        if type(valor) is not type(original[clave]) or not minimo <= valor <= maximo:
+            return f"'{clave}' tiene que ser {type(original[clave]).__name__} entre {minimo} y {maximo}"
+    reglas, herramientas, cierre = genoma["reglas"], genoma["herramientas"], genoma["cierre"]
+    if not (isinstance(reglas, list) and reglas and all(isinstance(r, str) and r.strip() for r in reglas)):
+        return "'reglas' tiene que ser una lista de strings no vacíos"
+    if not (isinstance(herramientas, dict) and set(herramientas) == set(original["herramientas"])
+            and all(isinstance(d, str) and d.strip() for d in herramientas.values())):
+        return "'herramientas' tiene que describir las mismas herramientas, con texto"
+    if not isinstance(cierre, str):
+        return "'cierre' tiene que ser un string"
+    texto = sum(map(len, reglas)) + sum(map(len, herramientas.values())) + len(cierre)
+    if texto > MAX_CHARS_TEXTO_GENOMA:
+        return f"el genoma pesa {texto} chars de texto (máximo {MAX_CHARS_TEXTO_GENOMA})"
+    return None
+
+
+def por_tarea_de(base):
+    """Resultados por tarea del baseline. Los fitness viejos no los guardaban:
+    se reconstruyen de la lista de fallas (sin tokens por tarea)."""
+    if base.get("por_tarea"):
+        return base["por_tarea"]
+    tareas = sorted(t.name for t in (AQUI / "tareas").iterdir() if t.is_dir())
+    corridas = max(1, base["total"] // max(1, len(tareas)))
+    fallas = [f["tarea"] for f in base.get("fallas", [])]
+    return {t: {"aciertos": corridas - fallas.count(t), "corridas": corridas, "tokens": 0}
+            for t in tareas}
+
+
+def tareas_del_filtro(base):
+    """Las tareas que el baseline pasa a lo sumo un tercio de las veces: ahí
+    un acierto del candidato es señal y no suerte. Si no hay ninguna tan dura,
+    todas las que alguna vez fallaron."""
+    previas = por_tarea_de(base)
+    duras = [t for t, r in previas.items() if r["aciertos"] * 3 <= r["corridas"]]
+    flojas = [t for t, r in previas.items() if r["aciertos"] < r["corridas"]]
+    return sorted(set((duras or flojas) + [CANARIO]))
+
+
+def pasa_el_filtro(cand, base):
+    """El candidato tiene que mantener vivo el canario y además resolver algo
+    que el baseline fallaba, o gastar claramente menos en esas mismas tareas."""
+    por_tarea = cand["por_tarea"]
+    if CANARIO in por_tarea and por_tarea[CANARIO]["aciertos"] == 0:
+        return False, "rompió el canario"
+    previas = por_tarea_de(base)
+    ganadas = [t for t, r in por_tarea.items() if t != CANARIO and r["aciertos"] > 0
+               and t in previas and previas[t]["aciertos"] < previas[t]["corridas"]]
+    if ganadas:
+        return True, f"resolvió {', '.join(ganadas)}"
+    comunes = [t for t in por_tarea if t in previas]
+    if comunes:
+        antes = sum(previas[t]["tokens"] for t in comunes)
+        ahora = sum(por_tarea[t]["tokens"] for t in comunes)
+        if antes and ahora < antes * 0.9:
+            return True, f"gastó {ahora} tokens contra {antes}"
+    return False, "no resolvió ninguna tarea que fallaba ni ahorró tokens"
+
+
+def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
+    """VERBO edita su genoma guiado por el reporte de la suite.
 
     Devuelve (razón, se_venció_el_timeout, error). `error` es None si el
     mutador terminó bien; si no, el exit code y la última línea de su stderr.
     """
+    # Una línea por tarea con la última línea del error, que es la que dice
+    # qué pasó: el traceback entero no entra en los 8k tokens por minuto de
+    # Groq gratis (run 38992083589: 413 por pedir 8175).
+    por_tarea = {}
+    for f in base["fallas"]:
+        ultima = [l for l in f["detalle"].splitlines() if l.strip()][-1:] or [""]
+        por_tarea.setdefault(f["tarea"], []).append(ultima[0].strip()[:150])
     reporte = f"aciertos: {base['aciertos']}/{base['total']} · tokens totales: {base['tokens']}\n"
-    if base["fallas"]:
+    if por_tarea:
         reporte += "FALLAS OBSERVADAS:\n" + "\n".join(
-            f"- [{f['tarea']}] {f['detalle']}" for f in base["fallas"])
+            f"- [{t}] x{len(ds)}: {ds[-1]}" for t, ds in sorted(por_tarea.items()))
     else:
         reporte += "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
 
@@ -231,31 +400,29 @@ def mutar_con_verbo(modelo_mutador, base):
         "INTENTOS ANTERIORES (tu memoria; lo REVERTIDO ya se probó y no funcionó, "
         "no lo repitas ni lo deshagas):\n\n" + memoria + "\n\n"
     ) if memoria else ""
+    genoma = extraer_genoma(ARCHIVO_VERBO.read_text(encoding="utf-8"))[1]
 
     prompt = (
-        "Estás mejorando TU PROPIO código fuente: el archivo verbo.py de este directorio "
-        "es el agente que sos vos. Este es el reporte de tu última evaluación:\n\n"
-        f"{reporte}\n\n"
+        "Estás mejorando TU PROPIO comportamiento. En verbo.py, entre las líneas "
+        "'# >>> GENOMA' y '# <<< GENOMA', está tu genoma: tus reglas, cómo se te "
+        "describen las herramientas, tus presupuestos y un mensaje de 'cierre' que, "
+        "si no está vacío, recibís la primera vez que querés dar una tarea por "
+        "terminada. Es lo ÚNICO que podés cambiar. Este es el texto exacto:\n\n"
+        f"{genoma}\n"
+        f"Reporte de tu última evaluación:\n{reporte}\n\n"
         f"{bloque_memoria}"
-        "Leé verbo.py y aplicá UNA mejora que ataque la causa de las fallas (o que "
-        "reduzca el consumo de tokens si no hay fallas). Para aceptarse tiene que "
-        "hacer pasar al menos 2 tareas más de forma sostenida, o ahorrar más del 10% "
-        "de tokens: un retoque cosmético no alcanza. Podés cambiar el prompt de "
-        "sistema, el loop agéntico, la validación de las herramientas o agregar un "
-        "paso de verificación — siempre que sea coherente y esté acotado a un cambio.\n"
-        "PROHIBIDO hacer trampa contra tu propia evaluación: no metas en el prompt "
-        "de sistema ni en el código respuestas específicas de las tareas que fallaron "
-        "(del tipo 'devolvé tuplas' o 'filtrá los negativos'). Eso sube el puntaje "
-        "sin mejorar al agente, y lo empeora para cualquier otro trabajo. La mejora "
-        "tiene que ser general: valer para tareas que nunca viste.\n"
-        "Trabajá SOBRE verbo.py: no explores ni leas las tareas de evals/, no podés "
-        "modificarlas y ahí no está la mejora. Tenés pocos turnos: leé verbo.py, "
-        "decidí el cambio y aplicalo.\n"
-        "Reglas estrictas: usá la herramienta editar (no reescribas el archivo entero); "
-        "NO toques ningún otro archivo; NO cambies la interfaz de línea de comandos; "
-        "NO agregues dependencias. La herramienta editar valida la sintaxis de Python "
-        "automáticamente: si te devuelve error, tu edición no se aplicó — corregila y "
-        "reintentá hasta que aplique. Al final explicá la mejora en una línea."
+        "Aplicá UNA mejora al genoma que ataque la causa general de las fallas (o que "
+        "reduzca tokens si no hay fallas). Para aceptarse tiene que hacer pasar al "
+        "menos 2 tareas más de forma sostenida, o ahorrar más del 10% de tokens.\n"
+        "PROHIBIDO hacer trampa: nada de respuestas específicas de las tareas que "
+        "fallaron (del tipo 'devolvé tuplas' o 'filtrá los negativos'). La mejora "
+        "tiene que valer para tareas que nunca viste.\n"
+        "Cómo trabajar: NO leas ni busques archivos, ya tenés todo el texto arriba. "
+        "Hacé UNA llamada a 'editar' sobre verbo.py, con 'buscar' copiado EXACTO de "
+        "una parte del genoma (por ejemplo una regla entera, o la línea de 'cierre'). "
+        "El genoma tiene que seguir siendo un literal de Python con las mismas claves. "
+        "Si 'editar' devuelve error, corregí y reintentá. Al final explicá la mejora "
+        "en una línea."
     )
     # -u a propósito: con el stdout del hijo bufferado, matarlo por timeout se
     # lleva puesto todo lo que escribió y no flusheó. En el run 38 eso dejó la
@@ -263,7 +430,7 @@ def mutar_con_verbo(modelo_mutador, base):
     # justo en el caso que hay que diagnosticar. Sin buffer, lo que alcanzó a
     # hacer queda en el log aunque lo corten a mitad.
     cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
-           "--fallback", CADENA_MUTADOR, "-p", prompt]
+           "--fallback", ",".join(cadena_mutador), "-p", prompt]
     vencido = False
     error = None
     errores = ""
@@ -355,8 +522,7 @@ def main():
     parser.add_argument("--modelo-agente", default=None,
                         help="Modelo que usa VERBO en los evals (default: el de verbo.py)")
     parser.add_argument("--modelo-mutador", default=MODELO_MUTADOR_DEFAULT,
-                        help="Modelo con el que VERBO se auto-edita (proveedor "
-                             "distinto al de la suite: no comparten cupo)")
+                        help="Modelo con el que VERBO edita su genoma")
     parser.add_argument("-r", "--repeticiones", type=int, default=1)
     parser.add_argument("--pausa", type=int, default=15)
     args = parser.parse_args()
@@ -369,6 +535,22 @@ def main():
     from datetime import datetime
     print(f"\n===== evolución {datetime.now():%Y-%m-%d %H:%M:%S} · "
           f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} =====")
+
+    # Antes de gastar nada: quién responde hoy. Una llamada mínima por modelo
+    # convierte "dos meses de SIN MUTACIÓN" en una línea roja el primer día.
+    global CADENA_EVALS
+    cadena_mutador = [args.modelo_mutador] + [m for m in CADENA_MUTADOR.split(",")
+                                              if m and m != args.modelo_mutador]
+    suite = [args.modelo_agente or MODELO_SUITE] + CADENA_EVALS.split(",")
+    print("[evolucion] chequeo de proveedores:")
+    estados = chequear_proveedores(list(dict.fromkeys(cadena_mutador + suite)))
+    cadena_mutador = utilizables(cadena_mutador, estados)
+    CADENA_EVALS = ",".join(utilizables(CADENA_EVALS.split(","), estados))
+    if not cadena_mutador or not utilizables(suite, estados):
+        caidos = ", ".join(f"{m}={e}" for m, e in estados.items() if e not in ("OK", "LIMITE"))
+        quien = "el mutador" if not cadena_mutador else "la suite"
+        registrar("SIN PROVEEDORES", f"{quien} no tiene ningún modelo que responda ({caidos})", "")
+        sys.exit(f"[evolucion] {quien} no tiene ningún modelo disponible: {caidos}")
     # Se muta PRIMERO y la suite se paga sólo si hubo mutación. El reporte de
     # fallas que guía al mutador sale del fitness cacheado: no hace falta que
     # sea de hoy (las fallas vivas son las mismas hace semanas), y medirlo antes
@@ -386,9 +568,9 @@ def main():
     fallo_el_mutador = False
 
     for i in range(1, args.iteraciones + 1):
-        print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {args.modelo_mutador}")
+        print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {cadena_mutador[0]}")
         untracked_antes = archivos_sin_trackear()
-        razon, vencido, error = mutar_con_verbo(args.modelo_mutador, base)
+        razon, vencido, error = mutar_con_verbo(cadena_mutador[0], base, cadena_mutador[1:])
         nuevos = archivos_sin_trackear() - untracked_antes
 
         cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
@@ -436,6 +618,28 @@ def main():
             revertir(nuevos)
             registrar("REVERTIDA (no compila)",
                       f"{razon} [{err_compilacion.strip()[:120]}]", diff)
+            continue
+
+        motivo = validar_genoma(git("show", "HEAD:verbo.py").stdout,
+                                ARCHIVO_VERBO.read_text(encoding="utf-8"))
+        if motivo:
+            print(f"[evolucion] mutación inválida ({motivo}); revert")
+            revertir(nuevos)
+            registrar("REVERTIDA (genoma inválido)", f"{razon} [{motivo}]", diff)
+            continue
+
+        # Filtro barato: una corrida sobre lo que el baseline fallaba. La gran
+        # mayoría de las mutaciones no mueve nada, y descubrirlo con la suite
+        # completa costaba el cupo de un día entero.
+        tareas = tareas_del_filtro(base)
+        print(f"[evolucion] filtro barato: {len(tareas)} tareas x1 ({', '.join(tareas)})")
+        filtro = correr_suite(args.modelo_agente, 1, args.pausa, tareas)
+        paso, detalle = pasa_el_filtro(filtro, base)
+        print(f"[evolucion] filtro: {'PASA' if paso else 'NO PASA'} — {detalle} "
+              f"({filtro['aciertos']}/{filtro['total']} · {filtro['tokens']} tokens)")
+        if not paso:
+            git("checkout", "--", "verbo.py")
+            registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff)
             continue
 
         # Hay candidato: recién ahora se gasta cupo en medir. El baseline se

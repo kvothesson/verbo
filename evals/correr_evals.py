@@ -92,7 +92,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--modelo", action="append", default=[],
                         help="Modelo a evaluar (repetible para comparar varios)")
-    parser.add_argument("--tarea", help="Correr solo esta tarea (nombre de carpeta)")
+    parser.add_argument("--tarea", action="append", default=[],
+                        help="Correr solo esta tarea (nombre de carpeta; repetible)")
     parser.add_argument("--pausa", type=int, default=15,
                         help="Segundos de espera entre tareas para respetar límites TPM (default 15)")
     parser.add_argument("-r", "--repeticiones", type=int, default=1,
@@ -105,9 +106,10 @@ def main():
     modelos = args.modelo or [None]  # None = default de verbo.py
     tareas = sorted(t for t in TAREAS.iterdir() if t.is_dir())
     if args.tarea:
-        tareas = [t for t in tareas if t.name == args.tarea]
-        if not tareas:
-            sys.exit(f"No existe la tarea '{args.tarea}'")
+        faltan = set(args.tarea) - {t.name for t in tareas}
+        if faltan:
+            sys.exit(f"No existe la tarea: {', '.join(sorted(faltan))}")
+        tareas = [t for t in tareas if t.name in args.tarea]
 
     todos = {}
     for modelo in modelos:
