@@ -213,7 +213,8 @@ def correr_suite(modelo_agente, reps, pausa):
 def mutar_con_verbo(modelo_mutador, base):
     """VERBO se edita a sí mismo guiado por el reporte de la suite.
 
-    Devuelve (razón, se_venció_el_timeout).
+    Devuelve (razón, se_venció_el_timeout, error). `error` es None si el
+    mutador terminó bien; si no, el exit code y la última línea de su stderr.
     """
     reporte = f"aciertos: {base['aciertos']}/{base['total']} · tokens totales: {base['tokens']}\n"
     if base["fallas"]:
@@ -261,10 +262,19 @@ def mutar_con_verbo(modelo_mutador, base):
     cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
            "--fallback", CADENA_MUTADOR, "-p", prompt]
     vencido = False
+    error = None
+    errores = ""
     try:
         r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
                            timeout=TIMEOUT_MUTADOR, encoding="utf-8", errors="replace")
         salida = (r.stdout or "").strip()
+        # El stderr se tiraba: del 18 de agosto al 16 de octubre de 2026 el
+        # mutador murió todos los días a los pocos segundos con un traceback
+        # que nadie vio, y la bitácora lo anotó como un "SIN MUTACIÓN" más.
+        errores = (r.stderr or "").strip()
+        if r.returncode != 0:
+            ultima = errores.splitlines()[-1].strip() if errores else "sin stderr"
+            error = f"exit {r.returncode}: {ultima[:160]}"
     except subprocess.TimeoutExpired as e:
         # Que el mutador se quede esperando cupo es un resultado posible, no un
         # error del harness. Sin este except la excepción mataba la corrida
@@ -279,6 +289,10 @@ def mutar_con_verbo(modelo_mutador, base):
     print("  --- mutador (salida completa) ---")
     print("  " + "\n  ".join(salida.splitlines()))
     print("  --- fin mutador ---")
+    if errores:
+        print("  --- mutador (stderr) ---")
+        print("  " + "\n  ".join(errores.splitlines()))
+        print("  --- fin stderr ---")
     # Se filtra por el texto YA sin sangría: VERBO imprime las herramientas
     # como "  → nombre", sus resultados como "    ← resumen" y los detalles de
     # edición como "    - buscar:". Filtrar por el string crudo dejaba pasar
@@ -289,7 +303,7 @@ def mutar_con_verbo(modelo_mutador, base):
               if l.strip() and not l.strip().startswith(ruido)]
     # "mejora automática" es el fallback cuando el mutador no llegó a explicar
     # nada: si murió por cupo o por timeout no hay última línea que rescatar.
-    return (lineas[-1][:100] if lineas else "sin explicación del mutador"), vencido
+    return (lineas[-1][:100] if lineas else "sin explicación del mutador"), vencido, error
 
 
 def compila():
@@ -366,11 +380,12 @@ def main():
     print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
           f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
     medido_en_esta_corrida = False
+    fallo_el_mutador = False
 
     for i in range(1, args.iteraciones + 1):
         print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {args.modelo_mutador}")
         untracked_antes = archivos_sin_trackear()
-        razon, vencido = mutar_con_verbo(args.modelo_mutador, base)
+        razon, vencido, error = mutar_con_verbo(args.modelo_mutador, base)
         nuevos = archivos_sin_trackear() - untracked_antes
 
         cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
@@ -385,6 +400,14 @@ def main():
                   "que evaluar")
             revertir(nuevos)
             registrar("SIN MUTACIÓN (timeout del mutador)", razon, diff)
+            continue
+        if error:
+            # Un crash no es "no se le ocurrió nada": se anota con su causa y
+            # la Action queda en rojo, para que no pase otros dos meses callado.
+            print(f"[evolucion] el mutador falló ({error}); revert")
+            revertir(nuevos)
+            registrar("FALLÓ EL MUTADOR", error, diff)
+            fallo_el_mutador = True
             continue
         if not cambiados and not intrusos:
             # Distinto de "tocó lo prohibido": el mutador simplemente no logró
@@ -451,6 +474,8 @@ def main():
             registrar("REVERTIDA (no superó el fitness)", razon, diff, base, cand)
 
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
+    if fallo_el_mutador:
+        sys.exit("[evolucion] el mutador falló: ver su stderr arriba")
 
 
 if __name__ == "__main__":

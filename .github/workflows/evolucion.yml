@@ -40,5 +40,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20
 
+      # También si la evolución terminó en rojo: la bitácora del fallo es
+      # justamente lo que hay que conservar.
       - name: pushear mejoras aceptadas
+        if: success() || failure()
         run: git push
