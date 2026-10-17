@@ -59,7 +59,10 @@ jobs:
         run: python verbo.py --chequear
 
       # También si la evolución terminó en rojo: la bitácora del fallo es
-      # justamente lo que hay que conservar.
+      # justamente lo que hay que conservar. El rebase es porque una corrida
+      # dura horas y main puede haber avanzado mientras tanto.
       - name: pushear mejoras aceptadas
         if: inputs.modo != 'chequeo' && (success() || failure())
-        run: git push
+        run: |
+          git pull --rebase origin main
+          git push
