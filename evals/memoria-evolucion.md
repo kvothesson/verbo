@@ -317,3 +317,6 @@ index ac75d33..52d4cc8 100644
 
 ## 2026-10-16 · SIN MUTACIÓN
 - **Intento:** sin explicación del mutador
+
+## 2026-10-17 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: openai.APIStatusError: Error code: 402 - {'message': 'Payment required to access this resource. Visit your billing tab.', 'type': 'payment_required_error', 'par
