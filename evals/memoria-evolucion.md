@@ -323,3 +323,6 @@ index ac75d33..52d4cc8 100644
 
 ## 2026-10-17 · FALLÓ EL MUTADOR
 - **Intento:** exit 1: openai.APIStatusError: Error code: 413 - {'error': {'message': 'Request too large for model `openai/gpt-oss-120b` in organization `org_01hvytmbmnf5xt0qesbqps6av
+
+## 2026-10-17 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: ERROR: ningún modelo de la cadena está disponible (sin key o rechazado por el proveedor; ver arriba).
