@@ -345,3 +345,22 @@ index ca418eb..b9bfe66 100644
      "max_contexto_chars": 60000,       # umbral para compactar historial
      "temperatura": 0.2,
 ```
+
+## 2026-10-19 · DESCARTADA EN EL FILTRO
+- **Intento:** Se añadió un mensaje predeterminado al campo **cierre** del genoma (`"cierre": "Verifica y corrige s [no resolvió ninguna tarea que fallaba ni ahorró tokens]
+- **Medición:** aciertos 2/5 → 1/5 · tokens 23418 → 50400
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index bf9514a..6a2bb8c 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -133,7 +133,7 @@ GENOMA = {
+     "temperatura": 0.2,
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+-    "cierre": "",
++    "cierre": "Verifica y corrige si es necesario.",
+ }
+ # <<< GENOMA
+```
