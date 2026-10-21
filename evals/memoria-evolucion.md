@@ -364,3 +364,25 @@ index bf9514a..6a2bb8c 100644
  }
  # <<< GENOMA
 ```
+
+## 2026-10-21 · DESCARTADA EN EL FILTRO
+- **Intento:** Se aumentó `max_turnos` a 30 y se redujo `max_contexto_chars` a 40000 para permitir más iteraciones  [no resolvió ninguna tarea que fallaba ni ahorró tokens]
+- **Medición:** aciertos 2/5 → 1/5 · tokens 11738 → 41892
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index bf9514a..bf9b065 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -127,9 +127,9 @@ GENOMA = {
+         "ejecutar": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+         "buscar": "Busca texto literal en los archivos de un directorio (recursivo) y devuelve coincidencias como archivo:línea. Útil para encontrar referencias antes de editar o renombrar.",
+     },
+-    "max_turnos": 20,                  # iteraciones del loop agéntico por pedido
++    "max_turnos": 30,                  # iteraciones del loop agéntico por pedido
+     "max_salida_herramienta": 6000,    # chars que se devuelven al modelo por herramienta
+-    "max_contexto_chars": 60000,       # umbral para compactar historial
++    "max_contexto_chars": 40000,       # umbral para compactar historial
+     "temperatura": 0.2,
+     # Si no está
+```
