@@ -37,18 +37,19 @@ jobs:
           git config user.name "Kvothesson"
           git config user.email "kvothesson@users.noreply.github.com"
 
-      # -r 3: la suite no es determinista. Con una sola corrida el ruido
-      # (±2 tareas) supera la señal y la evolución acepta cambios al azar.
+      # -r 3 es el máximo de rondas de la suite: entran las que da el tiempo,
+      # y el test de signos decide con las que haya. --iteraciones 4 es el
+      # máximo de candidatos: se arranca otro solo si queda tiempo para él.
       # --minutos 150 corta adentro y deja anotado SIN TIEMPO; los 165 del
       # paso son la red por si eso falla, y dejan lugar para el push.
-      - name: evolucionar (1 iteración diaria)
+      - name: evolucionar (hasta 4 candidatos por día)
         if: inputs.modo != 'chequeo'
         timeout-minutes: 165
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python -u evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20 --minutos 150
+        run: python -u evals/evolucionar.py --iteraciones 4 -r 3 --pausa 20 --minutos 150
 
       # Una llamada mínima (con herramientas) a cada modelo de la cadena y el
       # listado de lo que ofrece cada proveedor. Sirve para rearmar la cadena

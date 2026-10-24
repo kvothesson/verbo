@@ -3,52 +3,53 @@
 Auto-iteración de VERBO: el agente mejora su propio código, con la suite
 de evals como juez y git como red de seguridad.
 
-El mutador ES el propio VERBO: se lanza una instancia del agente sobre su
-propio repositorio con el texto exacto de su GENOMA (el bloque delimitado de
-verbo.py con reglas, descripciones de herramientas y presupuestos) y la
-instrucción de editarlo. No lee archivos: todo el pedido tiene que entrar en
-los 8k tokens por minuto de Groq gratis.
+El mutador ES el propio VERBO: se lanza una instancia del agente en un taller
+fuera del repo, con una copia de verbo.py, su genoma, un mapa del código y
+las trazas de sus fallas. Desde el 2026-10-24 puede editar TODO verbo.py, no
+solo el genoma: en dos meses de genoma solo, movió los mismos dos números.
+Lee por rangos (leer desde/hasta): el archivo entero no entra en los 8k
+tokens por minuto de Groq gratis.
 
-Loop por corrida:
+Loop por corrida (varios candidatos, mientras alcance el presupuesto):
   0. chequeo de proveedores: una llamada mínima a cada modelo; los que
      rechazan quedan afuera y, si no queda ninguno, la corrida sale en rojo
-  1. VERBO edita su genoma guiado por el fitness cacheado Y por su bitácora
+  1. VERBO se edita guiado por el fitness, las trazas del último filtro, su
+     bitácora y la lista de zonas que ya probó sin éxito
   2. si no editó nada, se corta acá: sin candidato no se gasta un token
-  3. guardrails: solo verbo.py, py_compile, y solo dentro del genoma (que
-     tiene que seguir siendo un literal válido y con límites)
-  4. filtro barato: baseline y candidato, una corrida intercalada sobre las
-     tareas que el baseline venía fallando más el canario; si el candidato no
-     resuelve nada nuevo ni ahorra tokens, se descarta
-  5. suite completa con baseline y candidato INTERCALADOS por tarea (medidos
-     en bloque, el segundo heredaba un cupo gastado); los pares en que
-     cualquiera se quedó sin cupo se descartan juntos, y con menos del 75%
-     de pares válidos no se decide nada
-  6. si el fitness mejora -> git commit; si no -> git checkout (revert)
+  3. guardrails baratos: py_compile, genoma válido y con límites, contrato
+     de la CLI, tamaño del prompt, nada de red/entorno/tests; y si el cambio
+     repite un intento o solo mueve perillas agotadas, no se mide
+  4. filtro barato: baseline y candidato (copias fuera del repo, donde no
+     ven los tests) intercalados sobre las tareas difíciles más el canario;
+     tiene que ganarle al baseline medido hoy, o ahorrar tokens sin perder
+  5. suite completa por RONDAS intercaladas, tantas como entren en el
+     tiempo; los pares en que cualquiera se quedó sin cupo se descartan juntos
+  6. se acepta con un test de signos sobre los pares (p ≤ 0.05), o por ahorro
+     de tokens sin perder aciertos ni colgarse más -> commit
   7. pase lo que pase, el intento queda anotado en la bitácora (commiteada)
 
 Se muta ANTES de medir a propósito: la suite y el mutador comen del mismo
 cupo gratis, y medir primero dejaba al mutador sin nada con qué trabajar.
 
-Fitness: aciertos con margen sobre la varianza, después frugalidad de tokens.
-
 Memoria: evals/memoria-evolucion.md, commiteada al repo (sin base de datos).
-El mutador la lee antes de editar, con el diff real de cada intento pasado y
-su veredicto — sin eso arranca ciego cada día y recicla ideas ya descartadas.
+El mutador la lee antes de editar, con el diff real de cada intento pasado,
+su veredicto y las zonas que tocó.
 
-Guardrails:
-  - si el mutador toca cualquier archivo que no sea verbo.py, se revierte TODO
-  - py_compile antes de gastar tokens en evaluar un candidato roto
-  - cada mejora aceptada es un commit; cada regresión se revierte
-  - iteraciones acotadas; sin loop infinito
+Lo que NO puede tocar nunca: el evaluador (correr_evals.py, las tareas y sus
+verificar.py), este archivo y el workflow. Si pudiera, subiría el puntaje
+sin mejorar el agente. Y corre con keys reales en un repo público: todo lo
+que se commitea pasa por tapar_secretos().
 
 Uso:
-    python evolucionar.py --iteraciones 1 -r 1
+    python evolucionar.py --iteraciones 4 -r 3 --minutos 150
     python evolucionar.py --modelo-agente groq/llama-3.3-70b-versatile \
                           --modelo-mutador groq/openai/gpt-oss-120b -r 2
 """
 import argparse
+import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,9 @@ except Exception:
     pass
 
 AQUI = Path(__file__).parent
+sys.path.insert(0, str(AQUI))
+from correr_evals import tapar_secretos  # noqa: E402
+
 REPO = AQUI.parent
 ARCHIVO_VERBO = REPO / "verbo.py"
 LOG = AQUI / "evolucion.log"
@@ -95,7 +99,11 @@ CADENA_EVALS = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
 # agota, la suite sigue con CADENA_EVALS.
 MODELO_MUTADOR_DEFAULT = "groq/openai/gpt-oss-120b"
 # gpt-oss-20b tiene cupo propio en Groq (los límites son por modelo).
-CADENA_MUTADOR = "groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,cerebras/gpt-oss-120b"
+# laguna de OpenRouter al final: ahora el mutador lee código y su historial
+# crece; cuando Groq lo rechaza por tamaño (413, el pedido supera los 8k
+# tokens por minuto) hace falta alguien con más margen donde caer.
+CADENA_MUTADOR = ("groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,"
+                  "openrouter/poolside/laguna-s-2.1:free,cerebras/gpt-oss-120b")
 MODELO_SUITE = "groq/openai/gpt-oss-120b"  # el default de verbo.py
 
 # El genoma es lo único que el mutador puede tocar (ver el bloque en verbo.py).
@@ -119,9 +127,10 @@ CANARIO = "01-crear-script"
 # 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
 # servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
 # 10 minutos no le alcanzan para leer verbo.py entero, decidir y editar (run 38,
-# 2026-08-16: se comió los 600s sin llegar a nada). El workflow corta a los 180
-# min y el peor caso acá es mutador + dos suites, así que hay lugar de sobra.
-TIMEOUT_MUTADOR = 2400     # segundos; agotarlo es un veredicto, no un crash
+# 2026-08-16: se comió los 600s sin llegar a nada). Pero con varios candidatos
+# por corrida, 40 min de un solo mutador son un día perdido; ahora lee por
+# rangos con el mapa del código en vez del archivo entero.
+TIMEOUT_MUTADOR = 1200     # segundos; agotarlo es un veredicto, no un crash
 
 # Presupuesto de la corrida entera. El workflow corta a los 180 min, y cuando
 # cortaba él (18, 20, 22 y 24 de octubre de 2026) se perdía todo: ni bitácora
@@ -214,7 +223,7 @@ def guardar_fitness(datos):
         encoding="utf-8")
 
 
-def registrar(veredicto, razon, diff, base=None, cand=None):
+def registrar(veredicto, razon, diff, base=None, cand=None, zonas=None):
     """Anota el intento en la bitácora y la commitea. Se llama SIEMPRE, incluso
     cuando no hubo mutación o se revirtió: el valor está justamente en recordar
     lo que no funcionó, para no reintentarlo mañana."""
@@ -225,8 +234,13 @@ def registrar(veredicto, razon, diff, base=None, cand=None):
             "Memoria del mutador: cada intento de auto-mejora con su resultado.\n"
             "La lee antes de mutar para no repetir ideas ya descartadas.\n",
             encoding="utf-8")
+    razon, diff = tapar_secretos(razon), tapar_secretos(diff or "")
     entrada = [f"\n## {datetime.now():%Y-%m-%d} · {veredicto}",
                f"- **Intento:** {razon}"]
+    if zonas:
+        # Qué partes de verbo.py tocó: con esto se detectan las zonas
+        # quemadas sin depender de que el diff (truncado) lo diga.
+        entrada.append(f"- **Zonas:** {', '.join(zonas)}")
     if base and cand:
         entrada.append(f"- **Medición:** aciertos {base['aciertos']}/{base['total']} → "
                        f"{cand['aciertos']}/{cand['total']} · tokens {base['tokens']} → "
@@ -268,17 +282,21 @@ def ultimos_resultados():
 
 
 def resumir(resultados):
-    """De la lista por tarea de correr_evals.py al fitness. Los aciertos se
-    recuentan desde las corridas porque comparar_suite puede haber sacado
-    algunas."""
+    """De la lista por tarea de correr_evals.py al fitness."""
     tareas = [t for t in resultados if t["corridas"]]
+    corridas = [c for t in tareas for c in t["corridas"]]
     return {
-        "aciertos": sum(c["paso"] for t in tareas for c in t["corridas"]),
-        "total": sum(len(t["corridas"]) for t in tareas),
-        "tokens": sum(c["tokens"] for t in tareas for c in t["corridas"]),
-        "fallas": [{"tarea": t["tarea"], "detalle": c["detalle"][:400]}
+        "aciertos": sum(c["paso"] for c in corridas),
+        "total": len(corridas),
+        "tokens": sum(c["tokens"] for c in corridas),
+        # Las corridas matadas no informan tokens (quedan en 0): sin contarlas
+        # aparte, colgarse más pasaba por "ahorrar".
+        "matados": sum(bool(c.get("matado")) for c in corridas),
+        "sin_tiempo": sum(bool(c.get("sin_tiempo")) for c in corridas),
+        "segundos": sum(c.get("segundos", 0) for c in corridas),
+        "fallas": [{"tarea": t["tarea"], "detalle": c["detalle"][:400],
+                    "traza": c.get("traza", "")[:1200]}
                    for t in tareas for c in t["corridas"] if not c["paso"]],
-        # Por tarea: el filtro elige con esto qué tareas son duras.
         "por_tarea": {t["tarea"]: {"aciertos": sum(c["paso"] for c in t["corridas"]),
                                    "corridas": len(t["corridas"]),
                                    "tokens": sum(c["tokens"] for c in t["corridas"])
@@ -292,20 +310,21 @@ def resumir(resultados):
 MIN_FRACCION_VALIDA = 0.75
 
 
-def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
-    """Mide el verbo.py actual (candidato) contra `referencia` (baseline)
-    intercalados por tarea, para que los dos gasten el mismo cupo. Los pares
-    en que cualquiera de los dos se quedó sin cupo se descartan juntos: así
-    el que tuvo mala suerte con el proveedor no pierde puntos.
-    Devuelve (base, cand, fracción de pares válidos, si se cortó por tiempo)."""
+def comparar_suite(modelo_agente, reps, pausa, referencia, candidato, tareas=None, costo=None):
+    """Mide `candidato` contra `referencia` (baseline), los dos copias fuera
+    del repo, intercalados por rondas para que gasten el mismo cupo. Los pares
+    en que cualquiera de los dos se quedó sin cupo se descartan juntos.
+    Devuelve {base, cand, pares, valida, rondas, incompleto, costo_corrida}."""
     cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps),
-           "--pausa", str(pausa), "--contra", str(referencia)]
+           "--pausa", str(pausa), "--contra", str(referencia), "--verbo", str(candidato)]
     if modelo_agente:
         cmd += ["-m", modelo_agente]
     for tarea in tareas or []:
         cmd += ["--tarea", tarea]
     if HASTA:
         cmd += ["--hasta", str(HASTA)]
+    if costo:
+        cmd += ["--costo", f"{costo:.0f}"]
     entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -313,20 +332,26 @@ def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
         for linea in p.stdout:
             print("  " + linea.rstrip())
     datos = ultimos_resultados()
+    rondas = datos.pop("rondas", reps)
     incompleto = datos.pop("incompleto", False)
     if set(datos) != {"verbo", "contra"}:
         raise SystemExit("la comparación no generó resultados")
     validos = total = 0
+    pares = []
     filtrados = {"verbo": [], "contra": []}
     for t_cand, t_base in zip(datos["verbo"], datos["contra"]):
-        pares = list(zip(t_cand["corridas"], t_base["corridas"]))
-        buenos = [(c, b) for c, b in pares if not c.get("sin_cupo") and not b.get("sin_cupo")]
-        total += len(pares)
+        todos = list(zip(t_cand["corridas"], t_base["corridas"]))
+        buenos = [(c, b) for c, b in todos if not c.get("sin_cupo") and not b.get("sin_cupo")]
+        total += len(todos)
         validos += len(buenos)
+        pares += [(c["paso"], b["paso"]) for c, b in buenos]
         filtrados["verbo"].append({"tarea": t_cand["tarea"], "corridas": [c for c, _ in buenos]})
         filtrados["contra"].append({"tarea": t_base["tarea"], "corridas": [b for _, b in buenos]})
-    return (resumir(filtrados["contra"]), resumir(filtrados["verbo"]),
-            validos / max(1, total), incompleto)
+    base, cand = resumir(filtrados["contra"]), resumir(filtrados["verbo"])
+    corridas = base["total"] + cand["total"]
+    return {"base": base, "cand": cand, "pares": pares, "valida": validos / max(1, total),
+            "rondas": rondas, "incompleto": incompleto,
+            "costo_corrida": (base["segundos"] + cand["segundos"]) / corridas if corridas else None}
 
 
 def chequear_proveedores(modelos):
@@ -369,14 +394,12 @@ def extraer_genoma(fuente):
 
 
 def validar_genoma(fuente_vieja, fuente_nueva):
-    """None si la mutación se quedó dentro del genoma y el genoma es válido;
-    si no, el motivo del rechazo."""
+    """None si el genoma sigue siendo válido; si no, el motivo. El código de
+    alrededor ya se puede cambiar: lo cuida contrato()."""
     import ast
     vieja, nueva = extraer_genoma(fuente_vieja), extraer_genoma(fuente_nueva)
     if nueva is None:
         return "las marcas del genoma no están (o están repetidas)"
-    if vieja is None or (vieja[0], vieja[2]) != (nueva[0], nueva[2]):
-        return "editó código fuera del genoma"
     try:
         arbol = ast.parse(nueva[1])
     except SyntaxError as e:
@@ -389,8 +412,9 @@ def validar_genoma(fuente_vieja, fuente_nueva):
     except ValueError:
         return "el genoma no es un literal puro (nada de llamadas ni variables)"
     original = ast.literal_eval(ast.parse(vieja[1]).body[0].value)
-    if not isinstance(genoma, dict) or set(genoma) != set(original):
-        return f"el genoma tiene que tener exactamente las claves {sorted(original)}"
+    # Se pueden AGREGAR claves (para código nuevo que las use), no sacar.
+    if not isinstance(genoma, dict) or not set(original) <= set(genoma):
+        return f"el genoma tiene que conservar las claves {sorted(original)}"
     for clave, (minimo, maximo) in LIMITES_GENOMA.items():
         valor = genoma[clave]
         if type(valor) is not type(original[clave]) or not minimo <= valor <= maximo:
@@ -398,9 +422,9 @@ def validar_genoma(fuente_vieja, fuente_nueva):
     reglas, herramientas, cierre = genoma["reglas"], genoma["herramientas"], genoma["cierre"]
     if not (isinstance(reglas, list) and reglas and all(isinstance(r, str) and r.strip() for r in reglas)):
         return "'reglas' tiene que ser una lista de strings no vacíos"
-    if not (isinstance(herramientas, dict) and set(herramientas) == set(original["herramientas"])
+    if not (isinstance(herramientas, dict) and set(original["herramientas"]) <= set(herramientas)
             and all(isinstance(d, str) and d.strip() for d in herramientas.values())):
-        return "'herramientas' tiene que describir las mismas herramientas, con texto"
+        return "'herramientas' tiene que seguir describiendo las herramientas, con texto"
     if not isinstance(cierre, str):
         return "'cierre' tiene que ser un string"
     texto = sum(map(len, reglas)) + sum(map(len, herramientas.values())) + len(cierre)
@@ -431,115 +455,106 @@ def tareas_del_filtro(base):
     return sorted(set((duras or flojas) + [CANARIO]))
 
 
-def pasa_el_filtro(cand, base):
-    """El candidato tiene que mantener vivo el canario y además resolver algo
-    que el baseline fallaba, o gastar claramente menos en esas mismas tareas."""
-    por_tarea = cand["por_tarea"]
-    if CANARIO in por_tarea and por_tarea[CANARIO]["aciertos"] == 0:
+def pasa_el_filtro(m):
+    """El candidato tiene que mantener vivo el canario y además ganarle al
+    baseline medido HOY en las mismas tareas (antes se lo comparaba contra el
+    fitness cacheado, de agosto), o gastar claramente menos sin perder nada."""
+    cand, base = m["cand"], m["base"]
+    if CANARIO in cand["por_tarea"] and cand["por_tarea"][CANARIO]["aciertos"] == 0:
         return False, "rompió el canario"
-    previas = por_tarea_de(base)
-    ganadas = [t for t, r in por_tarea.items() if t != CANARIO and r["aciertos"] > 0
-               and t in previas and previas[t]["aciertos"] < previas[t]["corridas"]]
-    if ganadas:
-        return True, f"resolvió {', '.join(ganadas)}"
-    comunes = [t for t in por_tarea if t in previas]
-    if comunes:
-        antes = sum(previas[t]["tokens"] for t in comunes)
-        ahora = sum(por_tarea[t]["tokens"] for t in comunes)
-        if antes and ahora < antes * 0.9:
-            return True, f"gastó {ahora} tokens contra {antes}"
-    return False, "no resolvió ninguna tarea que fallaba ni ahorró tokens"
+    ganados, perdidos = contar(m["pares"])
+    if ganados > perdidos:
+        return True, f"ganó {ganados} pares y perdió {perdidos}"
+    if perdidos == 0 and ahorra(cand, base):
+        return True, f"gastó {cand['tokens']} tokens contra {base['tokens']}"
+    return False, (f"ganó {ganados} pares y perdió {perdidos}, sin ahorro claro "
+                   f"({cand['tokens']} contra {base['tokens']} tokens)")
 
 
-def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
-    """VERBO edita su genoma guiado por el reporte de la suite.
+def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechazos_hoy):
+    """VERBO se edita a sí mismo, en un taller fuera del repo (no ve los tests
+    ni nada más que su propio código). Devuelve (razón, vencido, error,
+    ruta del candidato)."""
+    fuente = ARCHIVO_VERBO.read_text(encoding="utf-8")
+    taller = Path(tempfile.mkdtemp(prefix="verbo-mutador-"))
+    candidato = taller / "verbo.py"
+    candidato.write_text(fuente, encoding="utf-8")
 
-    Devuelve (razón, se_venció_el_timeout, error). `error` es None si el
-    mutador terminó bien; si no, el exit code y la última línea de su stderr.
-    """
-    # Una línea por tarea con la última línea del error, que es la que dice
-    # qué pasó: el traceback entero no entra en los 8k tokens por minuto de
-    # Groq gratis (run 38992083589: 413 por pedir 8175).
-    por_tarea = {}
-    for f in base["fallas"]:
-        ultima = [l for l in f["detalle"].splitlines() if l.strip()][-1:] or [""]
-        por_tarea.setdefault(f["tarea"], []).append(ultima[0].strip()[:150])
     reporte = f"aciertos: {base['aciertos']}/{base['total']} · tokens totales: {base['tokens']}\n"
-    if por_tarea:
-        reporte += "FALLAS OBSERVADAS:\n" + "\n".join(
-            f"- [{t}] x{len(ds)}: {ds[-1]}" for t, ds in sorted(por_tarea.items()))
-    else:
-        reporte += "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
+    fallas = reporte_de_fallas(base)
+    reporte += ("FALLAS OBSERVADAS (con la traza de lo que hiciste):\n" + fallas) if fallas else \
+        "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
 
     memoria = leer_memoria()
     bloque_memoria = (
-        "INTENTOS ANTERIORES (tu memoria; lo REVERTIDO ya se probó y no funcionó, "
-        "no lo repitas ni lo deshagas):\n\n" + memoria + "\n\n"
-    ) if memoria else ""
-    genoma = extraer_genoma(ARCHIVO_VERBO.read_text(encoding="utf-8"))[1]
+        "INTENTOS ANTERIORES (tu memoria; lo descartado ya se probó y no funcionó, "
+        "no lo repitas ni lo deshagas):\n\n" + memoria + "\n\n") if memoria else ""
+    por_zona = fracasos_por_zona(intentos)
+    zonas_txt = ", ".join(f"{z} x{n}" for z, n in por_zona.most_common(10))
+    bloque_zonas = (f"ZONAS YA PROBADAS SIN ÉXITO: {zonas_txt}.\n"
+                    + (f"PROHIBIDO tocar solo estas perillas: {', '.join(sorted(quem))}.\n" if quem else "")
+                    ) if zonas_txt else ""
+    bloque_hoy = ("HOY YA SE RECHAZARON: " + " | ".join(rechazos_hoy) + "\n") if rechazos_hoy else ""
+    genoma = extraer_genoma(fuente)[1]
 
     prompt = (
-        "Estás mejorando TU PROPIO comportamiento. En verbo.py, entre las líneas "
-        "'# >>> GENOMA' y '# <<< GENOMA', está tu genoma: tus reglas, cómo se te "
-        "describen las herramientas, tus presupuestos y un mensaje de 'cierre' que, "
-        "si no está vacío, recibís la primera vez que querés dar una tarea por "
-        "terminada. Es lo ÚNICO que podés cambiar. Este es el texto exacto:\n\n"
-        f"{genoma}\n"
+        "Estás mejorando TU PROPIO código: verbo.py, en el directorio actual, es el agente "
+        "que sos. Podés cambiar cualquier parte: el genoma (reglas, descripciones de "
+        "herramientas, presupuestos y el mensaje de 'cierre'), y también el motor: el loop "
+        "agéntico, cómo se compacta el historial, cómo se arma el prompt, las herramientas, "
+        "cómo se esperan los límites de tasa. Las fallas por tiempo suelen venir de esperar "
+        "cupo de tokens por minuto: mandar menos contexto por llamada es una palanca real.\n\n"
+        f"Este es tu genoma actual:\n{genoma}\n"
+        f"Mapa de verbo.py (líneas: qué hay):\n{mapa_codigo(fuente)}\n\n"
         f"Reporte de tu última evaluación:\n{reporte}\n\n"
-        f"{bloque_memoria}"
-        "Aplicá UNA mejora al genoma que ataque la causa general de las fallas (o que "
-        "reduzca tokens si no hay fallas). Para aceptarse tiene que hacer pasar al "
-        "menos 2 tareas más de forma sostenida, o ahorrar más del 10% de tokens.\n"
-        "PROHIBIDO hacer trampa: nada de respuestas específicas de las tareas que "
-        "fallaron (del tipo 'devolvé tuplas' o 'filtrá los negativos'). La mejora "
-        "tiene que valer para tareas que nunca viste.\n"
-        "Cómo trabajar: tu única herramienta es 'editar', y ya tenés todo el texto "
-        "arriba. Hacé UNA llamada a 'editar' sobre verbo.py, con 'buscar' copiado EXACTO de "
-        "una parte del genoma (por ejemplo una regla entera, o la línea de 'cierre'). "
-        "El genoma tiene que seguir siendo un literal de Python con las mismas claves. "
-        "Si 'editar' devuelve error, corregí y reintentá. Al final explicá la mejora "
-        "en una línea."
+        f"{bloque_memoria}{bloque_zonas}{bloque_hoy}\n"
+        "Aplicá UNA mejora coherente (puede ser más de una edición) que ataque la causa "
+        "general de las fallas, o que reduzca tokens si no hay fallas. Se acepta solo si "
+        "le gana al código actual en tareas que no ves, con significancia estadística.\n"
+        "PROHIBIDO hacer trampa: nada específico de las tareas que fallaron. Tiene que valer "
+        "para tareas que nunca viste.\n"
+        "CONTRATO (si lo rompés se descarta sin medir): la CLI conserva -p, -m, --auto, "
+        "--fallback, --herramientas, --chequear y --tiempo; se sigue imprimiendo la línea "
+        "[verbo-stats]; GENOMA sigue siendo un literal de Python con las mismas claves; "
+        "prompt_sistema() y HERRAMIENTAS siguen existiendo y juntos pesan menos de "
+        f"{MAX_CHARS_PROMPT} caracteres; nada de red, ni os.environ, ni exec/eval nuevos.\n"
+        "Cómo trabajar: leé con 'leer' (usando desde/hasta, NO el archivo entero) solo lo que "
+        "vas a cambiar, y editá con 'editar' copiando EXACTO el texto a reemplazar. Al final "
+        "explicá la mejora en una línea."
     )
-    # -u a propósito: con el stdout del hijo bufferado, matarlo por timeout se
-    # lleva puesto todo lo que escribió y no flusheó. En el run 38 eso dejó la
-    # sección del mutador COMPLETAMENTE vacía, que es la peor evidencia posible
-    # justo en el caso que hay que diagnosticar. Sin buffer, lo que alcanzó a
-    # hacer queda en el log aunque lo corten a mitad.
-    # Solo 'editar': pedirle por prompt que no explorara no alcanzó (run
-    # 38992832585: leyó verbo.py tres veces, buscó cuatro y chocó el 413).
-    cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
-           "--fallback", ",".join(cadena_mutador), "--herramientas", "editar",
-           "-p", prompt]
-    vencido = False
-    error = None
-    errores = ""
-    # Nunca más que lo que le queda a la corrida: que el mutador se coma el
-    # presupuesto es un SIN MUTACIÓN anotado, no un job cancelado.
     limite = TIMEOUT_MUTADOR
     if HASTA:
         limite = max(60, min(TIMEOUT_MUTADOR, int(HASTA - time.time())))
+    # -u: con el stdout bufferado, matarlo por timeout se llevaba todo lo que
+    # no había flusheado (run 38: sección del mutador vacía). --tiempo un poco
+    # antes del timeout duro para que corte prolijo y explique.
+    cmd = [sys.executable, "-u", str(ARCHIVO_VERBO), "--auto", "-m", modelo_mutador,
+           "--fallback", ",".join(cadena_mutador), "--herramientas", "leer,editar,buscar",
+           "--tiempo", str(max(30, limite - 30)), "-p", prompt]
+    vencido = False
+    error = None
+    errores = ""
     try:
-        r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=taller, capture_output=True, text=True,
                            timeout=limite, encoding="utf-8", errors="replace")
         salida = (r.stdout or "").strip()
         # El stderr se tiraba: del 18 de agosto al 16 de octubre de 2026 el
-        # mutador murió todos los días a los pocos segundos con un traceback
-        # que nadie vio, y la bitácora lo anotó como un "SIN MUTACIÓN" más.
+        # mutador murió todos los días con un traceback que nadie vio.
         errores = (r.stderr or "").strip()
-        if r.returncode != 0:
+        if r.returncode == 3:
+            vencido = True
+        elif r.returncode != 0:
             ultima = errores.splitlines()[-1].strip() if errores else "sin stderr"
             error = f"exit {r.returncode}: {ultima[:160]}"
     except subprocess.TimeoutExpired as e:
-        # Que el mutador se quede esperando cupo es un resultado posible, no un
-        # error del harness. Sin este except la excepción mataba la corrida
-        # entera: la Action quedaba en rojo y el día no dejaba ni una línea en
-        # la bitácora (pasó el 15 y el 16 de agosto de 2026).
+        # Quedarse esperando cupo es un resultado posible, no un error del harness.
         vencido = True
         parcial = e.stdout or ""
         if isinstance(parcial, bytes):
             parcial = parcial.decode("utf-8", "replace")
         salida = parcial.strip()
         print(f"  [mutador] se venció el timeout de {limite}s")
+    salida, errores = tapar_secretos(salida), tapar_secretos(errores)
     print("  --- mutador (salida completa) ---")
     print("  " + "\n  ".join(salida.splitlines()))
     print("  --- fin mutador ---")
@@ -547,69 +562,289 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
         print("  --- mutador (stderr) ---")
         print("  " + "\n  ".join(errores.splitlines()))
         print("  --- fin stderr ---")
-    # Se filtra por el texto YA sin sangría: VERBO imprime las herramientas
-    # como "  → nombre", sus resultados como "    ← resumen" y los detalles de
-    # edición como "    - buscar:". Filtrar por el string crudo dejaba pasar
-    # esas líneas y la "razón" del commit terminaba siendo un output de tool.
     ruido = ("→", "←", "- buscar:", "- reemplazar:", "[verbo-stats]",
-             "[límite", "[tool call", "[VERBO", "VERBO ·")
+             "[límite", "[tool call", "[VERBO", "VERBO ·", "[toda la cadena", "[contexto")
     lineas = [l.strip() for l in salida.splitlines()
               if l.strip() and not l.strip().startswith(ruido)]
-    # "mejora automática" es el fallback cuando el mutador no llegó a explicar
-    # nada: si murió por cupo o por timeout no hay última línea que rescatar.
-    return (lineas[-1][:100] if lineas else "sin explicación del mutador"), vencido, error
+    return (lineas[-1][:100] if lineas else "sin explicación del mutador"), vencido, error, candidato
 
 
-def compila():
-    r = subprocess.run([sys.executable, "-m", "py_compile", str(ARCHIVO_VERBO)],
+def compila(ruta):
+    r = subprocess.run([sys.executable, "-m", "py_compile", str(ruta)],
                        capture_output=True, text=True)
     return r.returncode == 0, r.stderr
 
 
-# La suite no es determinista: con las tareas de BigCodeBench, una misma
-# versión de verbo.py osciló entre 7/13 y 9/13 en días distintos. Aceptar
-# cualquier +1 de aciertos con una sola corrida es aceptar RUIDO — así la
-# evolución hizo tres commits en 17 días tocando la misma línea de ida y
-# vuelta, con saldo neto cero. El margen exige que la mejora supere la
-# varianza observada; correr con -r 3 la reduce y hace el margen alcanzable.
-# Se escala con las repeticiones: con -r 3 los aciertos se cuentan sobre 39
-# corridas en vez de 13, así que un "+2" absoluto sería una vara MÁS BLANDA.
-# El margen se expresa en tareas-equivalente para que exigir lo mismo cueste
-# lo mismo con cualquier -r.
-MARGEN_POR_TAREA = 2  # tareas de ventaja mínima para creerle a una mejora
+def contar(pares):
+    """(ganados, perdidos): pares en que solo el candidato pasó, y al revés.
+    Los empates no dicen nada de cuál es mejor."""
+    return (sum(1 for c, b in pares if c and not b),
+            sum(1 for c, b in pares if b and not c))
 
 
-def es_mejor(cand, base, reps=1):
-    delta = cand["aciertos"] - base["aciertos"]
-    # Con una sola corrida no hay forma de separar señal de ruido: el swing
-    # observado con código idéntico fue de 2 tareas, el margen entero. Por eso
-    # una mejora de aciertos solo se cree con al menos 2 repeticiones. Si se
-    # descartaron pares sin cupo el margen NO se achica: menos corridas es más
-    # ruido, y ablandar la vara justo ahí sería aceptar suerte.
-    if reps >= 2 and delta >= MARGEN_POR_TAREA * reps:
-        return True
-    if delta < 0:
-        return False
-    # Empate (o mejora dentro del ruido): solo se acepta si además no perdió
-    # aciertos y ahorra tokens de forma contundente.
-    return cand["tokens"] < base["tokens"] * 0.9
+def p_signos(ganados, perdidos):
+    """Test de signos de una cola: probabilidad de ganar al menos `ganados` de
+    los pares discordantes si candidato y baseline fueran iguales."""
+    from math import comb
+    n = ganados + perdidos
+    if n == 0:
+        return 1.0
+    return sum(comb(n, k) for k in range(ganados, n + 1)) / 2 ** n
 
 
-def revertir(nuevos_untracked):
-    git("checkout", "--", ".")
-    for f in nuevos_untracked:
-        if not f.startswith("evals/resultados-"):
-            (REPO / f).unlink(missing_ok=True)
+def ahorra(cand, base):
+    """Ahorro de tokens que cuenta: más de 10%, sin colgarse ni quedarse sin
+    tiempo más que el baseline (las corridas matadas no suman tokens)."""
+    return (base["tokens"] > 0 and cand["tokens"] < base["tokens"] * 0.9
+            and cand["matados"] <= base["matados"]
+            and cand["sin_tiempo"] <= base["sin_tiempo"])
+
+
+# Nivel de significancia del test de signos sobre la suite: con 0 pares
+# perdidos hacen falta 5 ganados; con 1 perdido, 7.
+ALFA = 0.05
+
+
+def decidir(m):
+    """¿Se acepta el candidato? Reemplaza al viejo "2 aciertos de ventaja por
+    repetición": con -r 3 la suite no entra en el día (2 x 13 x 3 corridas) y
+    con menos rondas esa vara pedía algo imposible o algo regalado. El test de
+    signos sobre los pares discordantes escala con lo que se haya podido medir
+    y nunca acepta por ruido con más de 5% de chance. Solo cuentan los pares de
+    la suite: los del filtro están sesgados a favor (por algo pasó)."""
+    ganados, perdidos = contar(m["pares"])
+    p = p_signos(ganados, perdidos)
+    if p <= ALFA:
+        return True, f"ganó {ganados} pares y perdió {perdidos} (p={p:.3f})"
+    if ganados >= perdidos and ahorra(m["cand"], m["base"]):
+        return True, f"mismos aciertos y {m['cand']['tokens']} tokens contra {m['base']['tokens']}"
+    return False, f"ganó {ganados} pares y perdió {perdidos} (p={p:.2f}, hace falta ≤{ALFA})"
+
+
+def nodos_top(fuente):
+    """[(nombre, desde, hasta)] de lo que hay al nivel del módulo. El genoma
+    se parte por clave: 'GENOMA:max_turnos', 'GENOMA:reglas', etc."""
+    nodos = []
+    for n in ast.parse(fuente).body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            desde = min([n.lineno] + [d.lineno for d in n.decorator_list])
+            nodos.append((n.name, desde, n.end_lineno))
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            nombre = n.targets[0].id
+            if nombre == "GENOMA" and isinstance(n.value, ast.Dict):
+                for k, v in zip(n.value.keys, n.value.values):
+                    if isinstance(k, ast.Constant):
+                        nodos.append((f"GENOMA:{k.value}", k.lineno, v.end_lineno))
+            else:
+                nodos.append((nombre, n.lineno, n.end_lineno))
+    return nodos
+
+
+def zonas_tocadas(viejo, nuevo):
+    """Nombres de las funciones, constantes o claves del genoma que cambió."""
+    import difflib
+    try:
+        nodos = nodos_top(viejo)
+    except SyntaxError:
+        return ["módulo"]
+    a, b = viejo.splitlines(), nuevo.splitlines()
+    zonas = set()
+    for tag, i1, i2, _, _ in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        for linea in range(i1 + 1, max(i1 + 1, i2) + 1):
+            zonas.add(next((nom for nom, d, h in nodos if d <= linea <= h), "módulo"))
+    return sorted(zonas)
+
+
+def diff_texto(viejo, nuevo):
+    import difflib
+    return "".join(difflib.unified_diff(viejo.splitlines(True), nuevo.splitlines(True),
+                                        "a/verbo.py", "b/verbo.py", n=2))
+
+
+def lineas_agregadas(diff):
+    return frozenset(l[1:].strip() for l in diff.splitlines()
+                     if l.startswith("+") and not l.startswith("+++") and l[1:].strip())
+
+
+def intentos_pasados():
+    """Todos los intentos de la bitácora: veredicto, zonas y líneas agregadas.
+    Los viejos no anotaban zonas: se deducen de las claves del genoma del diff."""
+    if not MEMORIA.is_file():
+        return []
+    intentos = []
+    for e in MEMORIA.read_text(encoding="utf-8").split("\n## ")[1:]:
+        veredicto = e.splitlines()[0].split("·", 1)[-1].strip()
+        diff = e.split("```diff", 1)[1] if "```diff" in e else ""
+        m = re.search(r"\*\*Zonas:\*\* (.+)", e)
+        if m:
+            zonas = [z.strip() for z in m.group(1).split(",") if z.strip()]
+        else:
+            zonas = sorted({f"GENOMA:{k}" for k in re.findall(r'^\+\s*"(\w+)":', diff, re.M)})
+        intentos.append({"veredicto": veredicto, "zonas": zonas,
+                         "agregadas": lineas_agregadas(diff)})
+    return intentos
+
+
+# Perillas numéricas: probar otro valor de la misma es barato de proponer y
+# casi nunca mueve nada. Del 5 al 24 de octubre de 2026 el mutador movió
+# max_turnos y max_contexto_chars una y otra vez, todos descartados.
+PERILLAS = {f"GENOMA:{k}" for k in ("max_turnos", "max_salida_herramienta",
+                                     "max_contexto_chars", "temperatura")}
+
+
+MAX_INTENTOS_PERILLA = 3
+
+
+def fracasos_por_zona(intentos):
+    from collections import Counter
+    return Counter(z for i in intentos if not i["veredicto"].startswith("ACEPTADA")
+                   and i["agregadas"] for z in i["zonas"])
+
+
+def quemadas(intentos):
+    return {z for z, n in fracasos_por_zona(intentos).items()
+            if z in PERILLAS and n >= MAX_INTENTOS_PERILLA}
+
+
+def es_repetida(diff, zonas, intentos, quem):
+    """Motivo para no gastar una medición en el candidato, o None."""
+    if zonas and set(zonas) <= quem:
+        return f"solo toca perillas ya agotadas ({', '.join(zonas)})"
+    agregadas = lineas_agregadas(diff)
+    if agregadas and any(agregadas == i["agregadas"] for i in intentos
+                         if not i["veredicto"].startswith("ACEPTADA")):
+        return "repite exactamente un intento anterior"
+    return None
+
+
+# Contrato del candidato con los evals. Fuera de esto puede cambiar lo que
+# quiera de verbo.py.
+FLAGS_CONTRATO = ("--prompt", "--modelo", "--auto", "--fallback", "--herramientas",
+                  "--chequear", "--tiempo")
+
+
+# Lo que un candidato NO puede agregar (contar más veces que el baseline): leer
+# los tests, salir a la red, tocar el entorno (donde están las keys) o
+# ejecutar código armado en runtime. Es lo que convertiría "mejorar" en
+# "hacer trampa" o en filtrar una key a un repo público.
+VIGILADOS = (r"verificar\.py", r"evals[/\\]", r"tareas[/\\]", r"environ", r"getenv",
+             r"API_KEY", r"GITHUB", r"https?://", r"\bsocket\b", r"\burllib\b",
+             r"\brequests\b", r"\bbase64\b", r"\bexec\(", r"(?<![\w.])eval\(",
+             r"__import__", r"\bimportlib\b")
+
+
+MAX_CHARS_PROMPT = 6000   # prompt de sistema + esquema de herramientas (~1.6k tokens)
+
+
+def contrato(candidato, fuente_vieja):
+    """None si el candidato respeta el contrato; si no, el motivo."""
+    nueva = candidato.read_text(encoding="utf-8")
+    for patron in VIGILADOS:
+        if len(re.findall(patron, nueva)) > len(re.findall(patron, fuente_vieja)):
+            return f"agrega '{patron}' (vigilado: tests, red, entorno o código dinámico)"
+    if "[verbo-stats]" not in nueva:
+        return "ya no imprime la línea [verbo-stats] que leen los evals"
+
+    def correr(cmd):
+        try:
+            return subprocess.run(cmd, cwd=candidato.parent, capture_output=True, text=True,
+                                  timeout=60, encoding="utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
+            return None
+    r = correr([sys.executable, str(candidato), "--help"])
+    if r is None or r.returncode != 0:
+        return "--help no responde"
+    faltan = [f for f in FLAGS_CONTRATO if f not in r.stdout]
+    if faltan:
+        return f"la CLI perdió {', '.join(faltan)}"
+    medir = ("import sys, json; sys.path.insert(0, sys.argv[1]); import verbo; "
+             "print(len(verbo.prompt_sistema()) + len(json.dumps(verbo.HERRAMIENTAS, ensure_ascii=False)))")
+    r = correr([sys.executable, "-c", medir, str(candidato.parent)])
+    try:
+        tam = int(r.stdout.strip().splitlines()[-1])
+    except (AttributeError, ValueError, IndexError):
+        return "no se pudo medir el prompt (prompt_sistema() y HERRAMIENTAS tienen que existir)"
+    if tam > MAX_CHARS_PROMPT:
+        return f"prompt + herramientas pesan {tam} chars (máximo {MAX_CHARS_PROMPT})"
+    return None
+
+
+def mapa_codigo(fuente):
+    """Índice de verbo.py para el mutador: qué hay en cada rango de líneas.
+    El archivo entero no entra en los 8k tokens por minuto de Groq gratis; con
+    esto sabe qué leer con leer(desde, hasta) en vez de leerlo todo."""
+    lineas = []
+    constantes = []
+    arbol = ast.parse(fuente)
+    for n in arbol.body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            doc = (ast.get_docstring(n) or "").strip().splitlines()
+            lineas.append(f"  {n.lineno}-{n.end_lineno} {n.name}: {doc[0][:90] if doc else ''}")
+        elif isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name):
+            constantes.append(f"{n.targets[0].id}({n.lineno})")
+    return "  constantes: " + ", ".join(constantes) + "\n" + "\n".join(lineas)
+
+
+def reporte_de_fallas(base):
+    """Una entrada por tarea con la última línea del error y la traza de lo
+    que hizo el agente: sin la traza, una falla por tiempo decía solo
+    "[timeout del agente]" y no había de dónde aprender."""
+    fallas = base.get("fallas_recientes") or base["fallas"]
+    por_tarea = {}
+    for f in fallas:
+        por_tarea.setdefault(f["tarea"], []).append(f)
+    partes = []
+    for tarea, fs in sorted(por_tarea.items()):
+        ultima = [l for l in fs[-1]["detalle"].splitlines() if l.strip()][-1:] or [""]
+        traza = fs[-1].get("traza", "")
+        traza = "\n".join("      " + l for l in traza.splitlines()[-8:])
+        partes.append(f"- [{tarea}] x{len(fs)}: {ultima[0].strip()[:150]}"
+                      + (f"\n{traza}" if traza else ""))
+    texto = ""
+    for p in partes:
+        if len(texto) + len(p) > 3000:
+            break
+        texto += p + "\n"
+    return texto.strip()
+
+
+def guardar_fallas_recientes(base, fallas):
+    """Las fallas del baseline medidas hoy en el filtro: son del código actual,
+    con traza, y le dan al próximo mutador algo más fresco que el fitness de
+    la última suite completa. Lo commitea registrar()."""
+    from datetime import datetime
+    base["fallas_recientes"] = fallas
+    datos = leer_fitness() or {}
+    datos["fallas_recientes"] = fallas
+    datos["fallas_recientes_medidas"] = f"{datetime.now():%Y-%m-%d}"
+    FITNESS.write_text(json.dumps(datos, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def copia_baseline(fuente):
+    """El baseline es verbo.py tal como está commiteado, en una carpeta aparte:
+    así baseline y candidato corren intercalados y los dos lejos de los tests."""
+    ruta = Path(tempfile.mkdtemp(prefix="verbo-baseline-")) / "verbo.py"
+    ruta.write_text(fuente, encoding="utf-8")
+    return ruta
+
+
+# Lo que se reserva para una iteración antes de arrancarla, si todavía no se
+# midió ningún filtro en esta corrida (el del 24/10/2026 tardó 34 min).
+ESTIMADO_ITERACION = 40 * 60
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iteraciones", type=int, default=1)
+    parser.add_argument("--iteraciones", type=int, default=1,
+                        help="Máximo de candidatos por corrida; corta antes si no queda tiempo")
     parser.add_argument("--modelo-agente", default=None,
                         help="Modelo que usa VERBO en los evals (default: el de verbo.py)")
     parser.add_argument("--modelo-mutador", default=MODELO_MUTADOR_DEFAULT,
-                        help="Modelo con el que VERBO edita su genoma")
-    parser.add_argument("-r", "--repeticiones", type=int, default=1)
+                        help="Modelo con el que VERBO edita su código")
+    parser.add_argument("-r", "--repeticiones", type=int, default=1,
+                        help="Rondas máximas de la suite completa (entran las que da el tiempo)")
     parser.add_argument("--pausa", type=int, default=15)
     parser.add_argument("--minutos", type=int, default=MINUTOS_DEFAULT,
                         help="Presupuesto total de la corrida; lo que no entra queda SIN TIEMPO")
@@ -625,7 +860,7 @@ def main():
     from datetime import datetime
     print(f"\n===== evolución {datetime.now():%Y-%m-%d %H:%M:%S} · "
           f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} · "
-          f"presupuesto={args.minutos} min =====")
+          f"presupuesto={args.minutos} min · hasta {args.iteraciones} candidatos =====")
 
     # Antes de gastar nada: quién responde hoy. Una llamada mínima por modelo
     # convierte "dos meses de SIN MUTACIÓN" en una línea roja el primer día.
@@ -643,11 +878,9 @@ def main():
         registrar("SIN PROVEEDORES", f"{quien} no tiene ningún modelo que responda ({caidos})", "")
         sys.exit(f"[evolucion] {quien} no tiene ningún modelo disponible: {caidos}")
     # Se muta PRIMERO y la suite se paga sólo si hubo mutación. El reporte de
-    # fallas que guía al mutador sale del fitness cacheado: no hace falta que
-    # sea de hoy (las fallas vivas son las mismas hace semanas), y medirlo antes
-    # de mutar costaba el cupo entero del día justo antes del único paso que
-    # hace avanzar el proyecto. El juicio no se ablanda: cuando hay candidato,
-    # baseline y candidato se miden los dos en esta misma corrida.
+    # fallas que guía al mutador sale del fitness cacheado (y de las fallas
+    # que dejó el último filtro); el juicio no se ablanda: baseline y
+    # candidato se miden los dos en esta misma corrida.
     base = leer_fitness()
     if base is None:
         print("[evolucion] no hay fitness cacheado: se mide el baseline una vez")
@@ -655,155 +888,147 @@ def main():
         guardar_fitness(base)
     print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
           f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
-    sin_cupo = False
-    sin_tiempo = False
-    fallo_el_mutador = False
+    sin_cupo = sin_tiempo = fallo_el_mutador = False
+    costo_iteracion = None
+    rechazos_hoy = []
 
     for i in range(1, args.iteraciones + 1):
-        print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {cadena_mutador[0]}")
-        untracked_antes = archivos_sin_trackear()
-        razon, vencido, error = mutar_con_verbo(cadena_mutador[0], base, cadena_mutador[1:])
-        nuevos = archivos_sin_trackear() - untracked_antes
+        restante = HASTA - time.time()
+        reserva = costo_iteracion or ESTIMADO_ITERACION
+        if restante < reserva:
+            print(f"\n[evolucion] quedan {restante / 60:.0f} min y una iteración se lleva "
+                  f"~{reserva / 60:.0f}: no se arranca otra")
+            break
+        inicio_iteracion = time.time()
+        fuente_base = ARCHIVO_VERBO.read_text(encoding="utf-8")
+        intentos = intentos_pasados()
+        quem = quemadas(intentos)
+        print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {cadena_mutador[0]}"
+              + (f" (perillas agotadas: {', '.join(sorted(quem))})" if quem else ""))
+        razon, vencido, error, candidato = mutar_con_verbo(
+            cadena_mutador[0], base, cadena_mutador[1:], quem, intentos, rechazos_hoy)
+        nuevo = candidato.read_text(encoding="utf-8")
+        diff = diff_texto(fuente_base, nuevo)
+        zonas = zonas_tocadas(fuente_base, nuevo) if diff else []
 
-        cambiados = [f for f in git("diff", "--name-only").stdout.split() if f]
-        intrusos = sorted(f for f in nuevos if not f.startswith("evals/resultados-"))
-        # Se captura ANTES de revertir: es lo que hace que la memoria sirva
-        # (saber qué línea se tocó, no solo la explicación del modelo).
-        diff = git("diff", "--", "verbo.py").stdout
         if vencido:
-            # Se revierte aunque haya alcanzado a editar: lo cortaron a mitad de
-            # camino, no es un cambio que el mutador haya dado por terminado.
-            print("[evolucion] el mutador se quedó sin tiempo; no hay candidato "
-                  "que evaluar")
-            revertir(nuevos)
-            registrar("SIN MUTACIÓN (timeout del mutador)", razon, diff)
+            # Se descarta aunque haya alcanzado a editar: lo cortaron a mitad
+            # de camino, no es un cambio que haya dado por terminado.
+            print("[evolucion] el mutador se quedó sin tiempo; no hay candidato que evaluar")
+            registrar("SIN MUTACIÓN (timeout del mutador)", razon, diff, zonas=zonas)
             continue
         if error:
             # Un crash no es "no se le ocurrió nada": se anota con su causa y
             # la Action queda en rojo, para que no pase otros dos meses callado.
-            print(f"[evolucion] el mutador falló ({error}); revert")
-            revertir(nuevos)
-            registrar("FALLÓ EL MUTADOR", error, diff)
+            print(f"[evolucion] el mutador falló ({error})")
+            registrar("FALLÓ EL MUTADOR", error, diff, zonas=zonas)
             fallo_el_mutador = True
             continue
-        if not cambiados and not intrusos:
-            # Distinto de "tocó lo prohibido": el mutador simplemente no logró
-            # editar nada (se quedó sin cupo, no encontró el texto exacto, o
-            # agotó sus turnos). Sin esta rama el caso se reportaba como una
-            # violación de guardrail y ocultaba que la mutación nunca ocurrió.
-            print("[evolucion] el mutador no produjo ninguna edición; "
-                  "no hay candidato que evaluar")
-            revertir(nuevos)
+        if not diff:
+            print("[evolucion] el mutador no produjo ninguna edición; no hay candidato que evaluar")
             registrar("SIN MUTACIÓN", razon, "")
             continue
-        if cambiados != ["verbo.py"] or intrusos:
-            print(f"[evolucion] el mutador tocó archivos prohibidos (diff={cambiados}, "
-                  f"nuevos={intrusos}); revert total")
-            revertir(nuevos)
-            registrar("REVERTIDA (tocó archivos prohibidos)",
-                      f"{razon} [tocó: {cambiados + intrusos}]", diff)
-            continue
+        print(f"[evolucion] zonas tocadas: {', '.join(zonas)}")
 
-        ok, err_compilacion = compila()
+        ok, err_compilacion = compila(candidato)
         if not ok:
-            print(f"[evolucion] el candidato no compila; revert. {err_compilacion.strip()[:200]}")
-            revertir(nuevos)
-            registrar("REVERTIDA (no compila)",
-                      f"{razon} [{err_compilacion.strip()[:120]}]", diff)
+            print(f"[evolucion] el candidato no compila. {err_compilacion.strip()[:200]}")
+            registrar("REVERTIDA (no compila)", f"{razon} [{err_compilacion.strip()[:120]}]",
+                      diff, zonas=zonas)
+            rechazos_hoy.append(f"{razon[:60]} (no compilaba)")
             continue
-
-        motivo = validar_genoma(git("show", "HEAD:verbo.py").stdout,
-                                ARCHIVO_VERBO.read_text(encoding="utf-8"))
+        motivo = validar_genoma(fuente_base, nuevo) or contrato(candidato, fuente_base)
         if motivo:
-            print(f"[evolucion] mutación inválida ({motivo}); revert")
-            revertir(nuevos)
-            registrar("REVERTIDA (genoma inválido)", f"{razon} [{motivo}]", diff)
+            print(f"[evolucion] mutación inválida ({motivo})")
+            registrar("REVERTIDA (rompe el contrato)", f"{razon} [{motivo}]", diff, zonas=zonas)
+            rechazos_hoy.append(f"{razon[:60]} ({motivo[:60]})")
+            continue
+        repetida = es_repetida(diff, zonas, intentos, quem)
+        if repetida:
+            # Sin diff en la bitácora: no es un intento nuevo, y no debe pesar
+            # como si lo fuera la próxima vez que se cuenten las zonas.
+            print(f"[evolucion] candidato repetido ({repetida}); no se gasta una medición")
+            registrar("REPETIDA", f"{razon} [{repetida}]", "", zonas=zonas)
+            rechazos_hoy.append(f"{razon[:60]} ({repetida})")
             continue
 
-        # El baseline es verbo.py tal como está commiteado, en una carpeta
-        # aparte: así baseline y candidato corren intercalados en la misma
-        # comparación y comparten el desgaste del cupo. (Fuera del repo para
-        # no dejar un archivo sin trackear; las keys llegan por el entorno.)
-        referencia = Path(tempfile.mkdtemp(prefix="verbo-baseline-")) / "verbo.py"
-        referencia.write_text(git("show", "HEAD:verbo.py").stdout, encoding="utf-8")
-
-        # Filtro barato: una corrida intercalada sobre lo que el baseline venía
-        # fallando. La gran mayoría de las mutaciones no mueve nada, y
-        # descubrirlo con la suite completa costaba el cupo de un día entero.
+        referencia = copia_baseline(fuente_base)
+        # Filtro barato: una ronda intercalada sobre lo que el baseline venía
+        # fallando más el canario. La gran mayoría de las mutaciones no mueve
+        # nada, y descubrirlo con la suite completa costaba el día entero.
         tareas = tareas_del_filtro(base)
         print(f"[evolucion] filtro barato: {len(tareas)} tareas x1, intercalado "
               f"({', '.join(tareas)})")
-        base_f, cand_f, valida, cortado = comparar_suite(args.modelo_agente, 1, args.pausa,
-                                                         referencia, tareas)
-        if cortado:
+        f = comparar_suite(args.modelo_agente, 1, args.pausa, referencia, candidato, tareas)
+        guardar_fallas_recientes(base, f["base"]["fallas"])
+        if f["incompleto"]:
             print("[evolucion] el filtro no entró en el presupuesto; no se decide")
-            git("checkout", "--", "verbo.py")
-            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [filtro incompleto]", diff, base_f, cand_f)
+            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [filtro incompleto]", diff, zonas=zonas)
             sin_tiempo = True
             continue
-        if valida < MIN_FRACCION_VALIDA:
-            print(f"[evolucion] filtro sin cupo ({valida:.0%} de pares válidos); no se decide")
-            git("checkout", "--", "verbo.py")
-            registrar("SIN CUPO PARA MEDIR", f"{razon} [filtro: {valida:.0%} de pares válidos]", diff)
+        if f["valida"] < MIN_FRACCION_VALIDA:
+            print(f"[evolucion] filtro sin cupo ({f['valida']:.0%} de pares válidos); no se decide")
+            registrar("SIN CUPO PARA MEDIR", f"{razon} [filtro: {f['valida']:.0%} de pares válidos]",
+                      diff, zonas=zonas)
             sin_cupo = True
             continue
-        paso, detalle = pasa_el_filtro(cand_f, base_f)
+        paso, detalle = pasa_el_filtro(f)
         print(f"[evolucion] filtro: {'PASA' if paso else 'NO PASA'} — {detalle} "
-              f"(candidato {cand_f['aciertos']}/{cand_f['total']} · {cand_f['tokens']} tok, "
-              f"baseline {base_f['aciertos']}/{base_f['total']} · {base_f['tokens']} tok)")
+              f"(candidato {f['cand']['aciertos']}/{f['cand']['total']} · {f['cand']['tokens']} tok, "
+              f"baseline {f['base']['aciertos']}/{f['base']['total']} · {f['base']['tokens']} tok)")
         if not paso:
-            git("checkout", "--", "verbo.py")
-            registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff, base_f, cand_f)
+            registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff,
+                      f["base"], f["cand"], zonas=zonas)
+            rechazos_hoy.append(f"{razon[:60]} (filtro: {detalle[:50]})")
+            costo_iteracion = time.time() - inicio_iteracion
             continue
 
-        print("[evolucion] suite completa, intercalada...")
-        nueva_base, cand, valida, cortado = comparar_suite(args.modelo_agente, args.repeticiones,
-                                                           args.pausa, referencia)
-        print(f"[evolucion] candidato: {cand['aciertos']}/{cand['total']} · {cand['tokens']} tokens "
-              f"(baseline: {nueva_base['aciertos']}/{nueva_base['total']} · "
-              f"{nueva_base['tokens']}) · {valida:.0%} de pares válidos")
-        if cortado:
-            # Medir solo las primeras tareas (en orden alfabético) no es una
-            # muestra de la suite: se anota lo medido pero no se decide.
-            print("[evolucion] la suite no entró en el presupuesto; no se decide")
-            git("checkout", "--", "verbo.py")
-            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [pasó el filtro; suite incompleta]",
-                      diff, nueva_base, cand)
+        print("[evolucion] suite completa, intercalada por rondas...")
+        s = comparar_suite(args.modelo_agente, args.repeticiones, args.pausa,
+                           referencia, candidato, costo=f["costo_corrida"])
+        print(f"[evolucion] candidato: {s['cand']['aciertos']}/{s['cand']['total']} · "
+              f"{s['cand']['tokens']} tokens (baseline: {s['base']['aciertos']}/{s['base']['total']} · "
+              f"{s['base']['tokens']}) · {s['rondas']} rondas · {s['valida']:.0%} de pares válidos")
+        if s["rondas"] == 0:
+            print("[evolucion] no entró ni una ronda de la suite; no se decide")
+            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [pasó el filtro; la suite no entró]",
+                      diff, f["base"], f["cand"], zonas=zonas)
             sin_tiempo = True
             continue
-        if valida < MIN_FRACCION_VALIDA:
-            git("checkout", "--", "verbo.py")
-            registrar("SIN CUPO PARA MEDIR", f"{razon} [suite: {valida:.0%} de pares válidos]",
-                      diff, nueva_base, cand)
+        if s["valida"] < MIN_FRACCION_VALIDA:
+            registrar("SIN CUPO PARA MEDIR", f"{razon} [suite: {s['valida']:.0%} de pares válidos]",
+                      diff, s["base"], s["cand"], zonas=zonas)
             sin_cupo = True
             continue
-        base = nueva_base
-        guardar_fitness(base)
-
-        if es_mejor(cand, base, args.repeticiones):
+        acepta, detalle = decidir(s)
+        guardar_fitness({**s["base"], "fallas_recientes": base.get("fallas_recientes", [])})
+        if acepta:
+            ARCHIVO_VERBO.write_text(nuevo, encoding="utf-8")
             git("add", "verbo.py")
             git_commit(
                 f"auto-iteración: {razon}\n\n"
-                f"Fitness: {base['aciertos']}/{base['total']} ({base['tokens']} tok) -> "
-                f"{cand['aciertos']}/{cand['total']} ({cand['tokens']} tok)\n\n"
-                "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
-            print("[evolucion] MEJORA ACEPTADA — commit hecho")
-            # Antes de registrar: registrar() es quien commitea el fitness, y
-            # todavía necesita el base viejo para anotar la medición del salto.
-            guardar_fitness(cand)
-            registrar("ACEPTADA", razon, diff, base, cand)
-            base = cand
+                f"Zonas: {', '.join(zonas)}\n"
+                f"Fitness: {s['base']['aciertos']}/{s['base']['total']} ({s['base']['tokens']} tok) -> "
+                f"{s['cand']['aciertos']}/{s['cand']['total']} ({s['cand']['tokens']} tok); {detalle}")
+            print(f"[evolucion] MEJORA ACEPTADA ({detalle}) — commit hecho")
+            # Antes de registrar: registrar() es quien commitea el fitness.
+            guardar_fitness(s["cand"])
+            registrar("ACEPTADA", f"{razon} [{detalle}]", diff, s["base"], s["cand"], zonas=zonas)
+            base = s["cand"]
         else:
-            git("checkout", "--", "verbo.py")
-            print("[evolucion] sin mejora — revert")
-            registrar("REVERTIDA (no superó el fitness)", razon, diff, base, cand)
+            print(f"[evolucion] sin mejora ({detalle})")
+            registrar("REVERTIDA (no superó al baseline)", f"{razon} [{detalle}]", diff,
+                      s["base"], s["cand"], zonas=zonas)
+            rechazos_hoy.append(f"{razon[:60]} (suite: {detalle[:50]})")
+            base = s["base"]
+        costo_iteracion = time.time() - inicio_iteracion
 
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
     if fallo_el_mutador:
         sys.exit("[evolucion] el mutador falló: ver su stderr arriba")
     if sin_tiempo:
-        # En rojo también: si la suite no entra en el presupuesto hay que
-        # achicarla (menos -r o menos tareas), no esperar a que un día entre.
+        # En rojo también: si la medición no entra en el presupuesto hay que
+        # achicarla (menos rondas o menos tareas), no esperar a que un día entre.
         sys.exit("[evolucion] la medición no entró en el presupuesto de tiempo")
     if sin_cupo:
         # En rojo a propósito: un día sin cupo para medir es un problema de

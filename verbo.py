@@ -101,12 +101,17 @@ FALLBACKS_DEFAULT = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
 CLIENTES = {}
 ENFRIAMIENTOS = {}  # modelo -> timestamp hasta el cual no volver a intentarlo
 MAX_ESPERA_GLOBAL = 120  # si el próximo cupo tarda más que esto, abandonar
+# Hora límite del pedido (--tiempo). Los evals mataban el proceso a los 300s y
+# se perdía todo: la salida, el porqué y los tokens gastados, que quedaban en
+# 0 y hacían parecer "barato" al candidato que más se colgaba.
+LIMITE = None
 
-# El genoma es la parte del agente que la evolución puede cambiar: cómo se le
-# habla al modelo y con qué presupuestos trabaja. Todo lo demás (herramientas,
-# guardrails, proveedores) es el motor y lo mantiene un humano. Tiene que ser
-# un literal de Python puro: evals/evolucionar.py lo valida con
-# ast.literal_eval y rechaza cualquier edición fuera de estas dos marcas.
+# El genoma concentra lo que más se ajusta: cómo se le habla al modelo y con
+# qué presupuestos trabaja. Hasta 2026-10-24 era lo ÚNICO que la evolución
+# podía tocar, y en dos meses solo movió los mismos dos números. Ahora puede
+# editar todo verbo.py; evals/evolucionar.py igual exige que esto siga siendo
+# un literal de Python puro, con estas claves y dentro de sus límites, y que
+# se respete el contrato de la CLI que usan los evals.
 # >>> GENOMA
 GENOMA = {
     "reglas": [
@@ -242,6 +247,21 @@ def _cadaveres(texto):
     return problemas
 
 
+def matar_arbol(p):
+    """Mata un proceso y todo lo que lanzó (lanzado con start_new_session en POSIX)."""
+    try:
+        if os.name == "posix":
+            os.killpg(p.pid, 9)
+        else:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+    except OSError:
+        pass
+    try:
+        p.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def ejecutar_herramienta(nombre, args, auto):
     try:
         if nombre == "leer":
@@ -341,14 +361,23 @@ def ejecutar_herramienta(nombre, args, auto):
                 respuesta = input(f"\n  ¿Ejecutar '{comando}'? [s/n] ").strip().lower()
                 if respuesta not in ("s", "si", "sí", "y", "yes"):
                     return "El usuario rechazó la ejecución de este comando."
-            r = subprocess.run(comando, shell=True, capture_output=True, text=True,
-                               timeout=120, encoding="utf-8", errors="replace")
-            salida = (r.stdout or "") + (("\n" + r.stderr) if r.stderr else "")
-            return truncar(f"[código de salida: {r.returncode}]\n{salida.strip() or '(sin salida)'}")
+            # stdin cerrado: un script que espera input() se colgaba hasta el
+            # timeout. Y sesión propia para poder matar el árbol entero: con
+            # shell=True, run() mata solo al shell, y el nieto que sigue vivo
+            # con el pipe abierto dejaba a communicate() esperando para siempre.
+            p = subprocess.Popen(comando, shell=True, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 text=True, encoding="utf-8", errors="replace",
+                                 start_new_session=os.name == "posix")
+            try:
+                out, err = p.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                matar_arbol(p)
+                return "ERROR: el comando superó los 120 segundos y fue cancelado."
+            salida = (out or "") + (("\n" + err) if err else "")
+            return truncar(f"[código de salida: {p.returncode}]\n{salida.strip() or '(sin salida)'}")
 
         return f"ERROR: herramienta desconocida '{nombre}'"
-    except subprocess.TimeoutExpired:
-        return "ERROR: el comando superó los 120 segundos y fue cancelado."
     except Exception as e:
         return f"ERROR: {type(e).__name__}: {e}"
 
@@ -463,14 +492,22 @@ def llamar_con_reintentos(estado, mensajes):
                              f"de tasa y el próximo cupo tarda {proximo / 60:.0f} min. "
                              "Esperá o agregá otro proveedor con --fallback.")
         espera = max(proximo, 2.0)
+        if LIMITE and time.time() + espera > LIMITE:
+            raise TiempoAgotado(f"esperando cupo ({espera:.0f}s) se pasaría del --tiempo")
         print(f"  [toda la cadena enfriándose; esperando {espera:.0f}s al primer cupo]")
         time.sleep(espera)
+
+
+class TiempoAgotado(Exception):
+    """Se terminó el --tiempo del pedido."""
 
 
 def turno(estado, mensajes, auto):
     """Un pedido del usuario: itera hasta que el modelo deja de pedir herramientas."""
     cierre_pendiente = bool(GENOMA["cierre"])
     for _ in range(MAX_TURNOS):
+        if LIMITE and time.time() > LIMITE:
+            raise TiempoAgotado("se terminó antes de la próxima llamada")
         compactar(mensajes)
         try:
             respuesta = llamar_con_reintentos(estado, mensajes)
@@ -591,7 +628,13 @@ def main():
     parser.add_argument("--herramientas", default="",
                         help="Limitar las herramientas disponibles, separadas por coma "
                              "(ej: 'leer,editar'). Vacío = todas.")
+    parser.add_argument("--tiempo", type=float, default=0,
+                        help="Segundos máximos para el pedido (-p). Al vencer corta prolijo, "
+                             "con exit 3 y las estadísticas impresas. 0 = sin límite.")
     args = parser.parse_args()
+    global LIMITE
+    if args.tiempo:
+        LIMITE = time.time() + args.tiempo
 
     cargar_env()
 
@@ -642,12 +685,20 @@ def main():
     if args.prompt:
         inicio = time.time()
         mensajes.append({"role": "user", "content": args.prompt})
-        turno(estado, mensajes, args.auto)
-        reparto = " ".join(f"{m}:{n}" for m, n in ESTADISTICAS["por_modelo"].items())
-        print(f"[verbo-stats] llamadas={ESTADISTICAS['llamadas']} "
-              f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f} "
-              f"modelos=({reparto})")
-        return
+        # Las estadísticas salen SIEMPRE, también si se cortó por tiempo o por
+        # cupo: los tokens que gastó una corrida fallida también cuentan.
+        codigo = 0
+        try:
+            turno(estado, mensajes, args.auto)
+        except TiempoAgotado as e:
+            print(f"\n[VERBO se quedó sin tiempo: {e}]")
+            codigo = 3
+        finally:
+            reparto = " ".join(f"{m}:{n}" for m, n in ESTADISTICAS["por_modelo"].items())
+            print(f"[verbo-stats] llamadas={ESTADISTICAS['llamadas']} "
+                  f"tokens={ESTADISTICAS['tokens']} segundos={time.time() - inicio:.1f} "
+                  f"modelos=({reparto})", flush=True)
+        sys.exit(codigo)
 
     print("Modo interactivo. Escribí tu pedido ('salir' para terminar).\n")
     while True:

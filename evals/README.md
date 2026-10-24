@@ -21,8 +21,16 @@ python correr_evals.py -r 3 --contra /tmp/viejo/verbo.py  # A/B intercalado cont
 
 Con `--contra`, cada corrida de cada tarea se mide con las dos versiones
 seguidas, alternando cuál va primero, para que compartan el mismo desgaste del
-cupo gratis. Las corridas que murieron sin cupo quedan marcadas (`sin_cupo`) y
-la evolución descarta el par entero.
+cupo gratis. Se mide por rondas (todas las tareas una vez, después otra), así
+que con `--hasta <epoch>` corta entre rondas y lo medido sigue siendo una
+muestra de toda la suite. Las corridas que murieron sin cupo quedan marcadas
+(`sin_cupo`) y la evolución descarta el par entero. `--verbo` evalúa otro
+`verbo.py` en lugar del del repo.
+
+Cada tarea tiene 300 s. El agente recibe `--tiempo 270` y corta solo,
+imprimiendo sus tokens. Si no corta, se mata el árbol de procesos entero y la
+corrida queda marcada como `matado`. En los dos casos se guarda la `traza`
+(herramientas, esperas por cupo), con las keys tapadas.
 
 Los agentes **no son deterministas**: la misma tarea puede salir bien o mal
 según el humor del sampling. Una corrida única es anécdota; `-r 3` da un pass

@@ -103,12 +103,19 @@ antes de dar una tarea por terminada — vive en un solo bloque de `verbo.py`,
 entre `# >>> GENOMA` y `# <<< GENOMA`. Es un literal de Python: lo podés editar
 a mano sin entender el resto del archivo.
 
-Ese bloque es también lo único que puede tocar la evolución automática
-([`evals/evolucionar.py`](evals/evolucionar.py), una vez por día en GitHub
-Actions): VERBO propone un cambio a su propio genoma, un filtro barato lo
-prueba contra las tareas que venía fallando, y solo si promete se paga la
-suite completa para decidir si se queda. Cada intento, aceptado o no, queda en
-la [bitácora](evals/memoria-evolucion.md).
+La evolución automática ([`evals/evolucionar.py`](evals/evolucionar.py),
+todos los días en GitHub Actions) puede cambiar el genoma y también el resto
+de `verbo.py`: el loop, la compactación del historial, las herramientas. Cada
+día prueba hasta 4 candidatos en 150 minutos. Un filtro barato compara cada
+uno contra el código actual en las tareas que venía fallando, y solo si le
+gana se paga la suite completa. Se acepta con un test de signos (p ≤ 0.05) o
+si ahorra tokens sin perder nada. Cada intento, aceptado o no, queda en la
+[bitácora](evals/memoria-evolucion.md).
+
+Lo que la evolución no puede tocar: los evals y sus tests, su propio código y
+el workflow. Un candidato tampoco puede agregar acceso a la red, al entorno
+(donde están las keys) ni a los tests, y tiene que respetar la CLI y el tope
+del prompt (6.000 caracteres entre prompt y herramientas).
 
 ## Evals
 

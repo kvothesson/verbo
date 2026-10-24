@@ -36,6 +36,7 @@ AQUI = Path(__file__).parent
 VERBO = AQUI.parent / "verbo.py"
 TAREAS = AQUI / "tareas"
 TIMEOUT_TAREA = 300
+MARGEN_TIEMPO = 30   # segundos antes del kill en que verbo.py corta solo
 
 
 def correr_con_timeout(cmd, timeout, cwd):
@@ -55,8 +56,35 @@ def correr_con_timeout(cmd, timeout, cwd):
         else:
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)],
                            capture_output=True)
-        p.communicate()
-        raise
+        # Lo que alcanzó a escribir antes de morir: es justo lo que explica
+        # por qué no terminó. Antes quedaba solo "[timeout del agente]".
+        out, err = p.communicate()
+        return None, out, err
+
+
+def tapar_secretos(texto):
+    """Reemplaza por *** el valor de cualquier key del entorno. Los detalles
+    de las fallas terminan en fitness-actual.json y en la bitácora, que se
+    commitean a un repo público: un agente (o un candidato) que imprima una
+    key no puede dejarla publicada."""
+    for nombre, valor in os.environ.items():
+        if len(valor) >= 8 and re.search(r"(KEY|TOKEN|SECRET)", nombre, re.I):
+            texto = texto.replace(valor, "***")
+    return texto
+
+
+# Líneas de la salida de verbo.py que cuentan qué hizo: herramientas, sus
+# resultados, esperas por cupo y cortes. Es lo que el mutador necesita para
+# entender una falla, y entra en pocos cientos de caracteres.
+PREFIJOS_TRAZA = ("→", "←", "[límite", "[toda la cadena", "[VERBO", "[tool call",
+                  "[contexto", "ERROR")
+LINEAS_TRAZA = 14
+
+
+def traza_de(salida):
+    lineas = [l.strip()[:160] for l in salida.splitlines()
+              if l.strip().startswith(PREFIJOS_TRAZA)]
+    return "\n".join(lineas[-LINEAS_TRAZA:])
 
 
 # Lo que imprime verbo.py cuando no le queda ningún modelo con cupo: una
@@ -64,7 +92,8 @@ def correr_con_timeout(cmd, timeout, cwd):
 SENIALES_SIN_CUPO = ("agotaron su límite de tasa", "ningún modelo de la cadena está disponible")
 
 
-def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo: Path = VERBO):
+def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo: Path = None):
+    verbo = verbo or VERBO
     prompt = (tarea / "prompt.txt").read_text(encoding="utf-8").strip()
     sandbox = Path(tempfile.mkdtemp(prefix=f"verbo-eval-{tarea.name}-"))
     setup = tarea / "setup"
@@ -72,20 +101,24 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
         for archivo in setup.iterdir():
             shutil.copy(archivo, sandbox / archivo.name)
 
-    cmd = [sys.executable, str(verbo), "--auto", "-p", prompt]
+    # --tiempo un poco antes del timeout duro: verbo.py corta solo, deja su
+    # salida y sus tokens. El kill queda de red por si el candidato no cumple.
+    cmd = [sys.executable, "-u", str(verbo), "--auto", "-p", prompt,
+           "--tiempo", str(TIMEOUT_TAREA - MARGEN_TIEMPO)]
     if modelo:
         cmd += ["-m", modelo]
     if puro:
         cmd += ["--fallback", ""]
 
     inicio = time.time()
-    try:
-        codigo, out, err = correr_con_timeout(cmd, TIMEOUT_TAREA, sandbox)
-        salida_agente = (out or "") + (err or "")
-        agente_ok = codigo == 0
-    except subprocess.TimeoutExpired:
-        salida_agente = "[timeout del agente]"
-        agente_ok = False
+    codigo, out, err = correr_con_timeout(cmd, TIMEOUT_TAREA, sandbox)
+    salida_agente = tapar_secretos((out or "") + (err or ""))
+    matado = codigo is None
+    if matado:
+        salida_agente += "\n[timeout del agente]"
+    # 3 = se quedó sin --tiempo pero terminó prolijo: lo que haya dejado
+    # escrito se verifica igual, como haría un usuario.
+    agente_ok = codigo in (0, 3)
     duracion = time.time() - inicio
 
     stats = {"llamadas": 0, "tokens": 0}
@@ -95,13 +128,10 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
 
     verificacion = ""
     if agente_ok:
-        try:
-            codigo, out, err = correr_con_timeout(
-                [sys.executable, str(tarea / "verificar.py")], 60, sandbox)
-            paso = codigo == 0
-            verificacion = (err or out or "").strip()
-        except subprocess.TimeoutExpired:
-            paso, verificacion = False, "[timeout de verificación]"
+        codigo, out, err = correr_con_timeout(
+            [sys.executable, str(tarea / "verificar.py")], 60, sandbox)
+        paso = codigo == 0
+        verificacion = "[timeout de verificación]" if codigo is None else (err or out or "").strip()
     else:
         paso = False
         verificacion = salida_agente.strip().splitlines()[-1] if salida_agente.strip() else "[el agente falló]"
@@ -112,7 +142,12 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
 
     sin_cupo = not paso and any(s in salida_agente for s in SENIALES_SIN_CUPO)
     return {"tarea": tarea.name, "paso": paso, "segundos": round(duracion, 1),
-            **stats, "sin_cupo": sin_cupo, "detalle": "" if paso else verificacion[-300:]}
+            **stats, "sin_cupo": sin_cupo,
+            # Sin stats confiables: un candidato que se cuelga más no puede
+            # "ahorrar tokens" gracias a los 0 de las corridas matadas.
+            "matado": matado, "sin_tiempo": codigo == 3,
+            "detalle": "" if paso else tapar_secretos(verificacion)[-300:],
+            "traza": "" if paso else traza_de(salida_agente)}
 
 
 def main():
@@ -134,7 +169,16 @@ def main():
     parser.add_argument("--hasta", type=float,
                         help="Hora límite (epoch): no se arranca ninguna corrida que, en el "
                              "peor caso, termine después. Lo que no entró queda sin medir")
+    parser.add_argument("--costo", type=float,
+                        help="Segundos estimados por corrida, para decidir si entra otra ronda "
+                             f"antes de --hasta (default {COSTO_DEFAULT})")
+    parser.add_argument("--verbo", type=Path,
+                        help="verbo.py a evaluar (default: el del repo). La evolución pasa "
+                             "una copia fuera del repo, donde el candidato no ve los tests")
     args = parser.parse_args()
+    global VERBO
+    if args.verbo:
+        VERBO = args.verbo.resolve()
 
     modelos = args.modelo or [None]  # None = default de verbo.py
     tareas = sorted(t for t in TAREAS.iterdir() if t.is_dir())
@@ -184,13 +228,19 @@ def main():
     guardar(todos)
 
 
-def entra(args, corridas):
-    """¿Entran `corridas` más antes de --hasta, contando cada una en su peor
-    caso? Sin esto la suite intercalada (2 x 13 tareas x 3) no tenía techo y
-    el workflow la cancelaba a las 3 horas sin dejar ni la bitácora."""
+COSTO_DEFAULT = 180   # segundos estimados por corrida si no se pasa --costo
+
+
+def entra(args, corridas, peor_caso=True):
+    """¿Entran `corridas` más antes de --hasta? Sin esto la suite intercalada
+    (2 x 13 tareas x 3) no tenía techo y el workflow la cancelaba a las 3
+    horas sin dejar ni la bitácora. Por corrida suelta se cuenta el peor caso;
+    para decidir si arrancar una ronda entera, el costo medido (--costo):
+    con el peor caso no entraría nunca ninguna."""
     if not args.hasta:
         return True
-    return time.time() + corridas * (TIMEOUT_TAREA + 60 + args.pausa) <= args.hasta
+    costo = (TIMEOUT_TAREA + 60) if peor_caso else (getattr(args, "costo", None) or COSTO_DEFAULT)
+    return time.time() + corridas * (costo + args.pausa) <= args.hasta
 
 
 def guardar(datos):
@@ -206,44 +256,58 @@ def comparar(tareas, modelo, args):
     llevó el día y el candidato falló 13 tareas en menos de un segundo cada
     una. Así los dos pagan el mismo desgaste del cupo."""
     lados = {"verbo": VERBO, "contra": args.contra.resolve()}
-    resultados = {lado: [] for lado in lados}
-    incompleto = False
-    print(f"\n=== Comparando verbo.py contra {args.contra.name} — {len(tareas)} tareas "
-          f"x{args.repeticiones}, intercalado ===")
-    for tarea in tareas:
-        print(f"  {tarea.name} ... ", end="", flush=True)
-        corridas = {lado: [] for lado in lados}
-        for i in range(args.repeticiones):
-            # Por par: un lado medido sin el otro no sirve para comparar.
+    corridas = {lado: {t.name: [] for t in tareas} for lado in lados}
+    rondas = 0
+    print(f"\n=== Comparando {VERBO.name} contra {args.contra.name} — {len(tareas)} tareas "
+          f"x{args.repeticiones}, intercalado por rondas ===")
+    # Por RONDAS (todas las tareas una vez, después todas otra vez) y no tarea
+    # por tarea: si el tiempo corta, lo medido son rondas completas sobre
+    # TODA la suite, que sí es una muestra. Cortar a mitad de la lista
+    # alfabética dejaba medidas solo las primeras tareas y no se podía decidir.
+    for i in range(args.repeticiones):
+        if not entra(args, 2 * len(tareas), peor_caso=False):
+            print(f"  [sin tiempo] no entra la ronda {i + 1}; quedan {rondas} completas")
+            break
+        orden = ["verbo", "contra"] if i % 2 == 0 else ["contra", "verbo"]
+        print(f"  ronda {i + 1} (arranca {orden[0]})")
+        cortada = False
+        for tarea in tareas:
+            # Red por par con el peor caso: si la estimación falló, la ronda
+            # se abandona entera (una ronda a medias no es muestra).
             if not entra(args, 2):
-                incompleto = True
+                cortada = True
                 break
-            orden = ["verbo", "contra"] if i % 2 == 0 else ["contra", "verbo"]
+            print(f"    {tarea.name} ... ", end="", flush=True)
             for lado in orden:
                 es_ultima = (tarea == tareas[-1] and i == args.repeticiones - 1
                              and lado == orden[-1])
                 res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
                                    puro=args.puro, verbo=lados[lado])
-                corridas[lado].append(res)
+                corridas[lado][tarea.name].append(res)
             print("".join("-" if r["sin_cupo"] else ("P" if r["paso"] else "F")
-                          for r in (corridas["verbo"][-1], corridas["contra"][-1])) + " ",
-                  end="", flush=True)
-        print()
-        for lado in lados:
-            for r in corridas[lado]:
+                          for r in (corridas["verbo"][tarea.name][-1],
+                                    corridas["contra"][tarea.name][-1])))
+            for lado in lados:
+                r = corridas[lado][tarea.name][-1]
                 if not r["paso"] and r["detalle"]:
                     print(f"      [{lado}] motivo: {r['detalle'][-200:]}")
-            resultados[lado].append({"tarea": tarea.name,
-                                     "aciertos": sum(r["paso"] for r in corridas[lado]),
-                                     "corridas": corridas[lado]})
-        if incompleto:
-            print(f"  [sin tiempo] se cortó en {tarea.name}; lo que sigue queda sin medir")
+        if cortada:
+            for lado in lados:
+                for t in tareas:
+                    del corridas[lado][t.name][rondas:]
+            print(f"  [sin tiempo] la ronda {i + 1} no terminó y se descarta; quedan {rondas} completas")
             break
+        rondas += 1
+    resultados = {lado: [{"tarea": t.name,
+                          "aciertos": sum(r["paso"] for r in corridas[lado][t.name]),
+                          "corridas": corridas[lado][t.name]} for t in tareas]
+                  for lado in lados}
     for lado in lados:
         ok = sum(t["aciertos"] for t in resultados[lado])
         total = sum(len(t["corridas"]) for t in resultados[lado])
         print(f"  {lado}: {ok}/{total} PASS")
-    resultados["incompleto"] = incompleto
+    resultados["rondas"] = rondas
+    resultados["incompleto"] = rondas < args.repeticiones
     return resultados
 
 
