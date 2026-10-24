@@ -39,13 +39,16 @@ jobs:
 
       # -r 3: la suite no es determinista. Con una sola corrida el ruido
       # (±2 tareas) supera la señal y la evolución acepta cambios al azar.
+      # --minutos 150 corta adentro y deja anotado SIN TIEMPO; los 165 del
+      # paso son la red por si eso falla, y dejan lugar para el push.
       - name: evolucionar (1 iteración diaria)
         if: inputs.modo != 'chequeo'
+        timeout-minutes: 165
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: python evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20
+        run: python -u evals/evolucionar.py --iteraciones 1 -r 3 --pausa 20 --minutos 150
 
       # Una llamada mínima (con herramientas) a cada modelo de la cadena y el
       # listado de lo que ofrece cada proveedor. Sirve para rearmar la cadena
@@ -59,10 +62,11 @@ jobs:
         run: python verbo.py --chequear
 
       # También si la evolución terminó en rojo: la bitácora del fallo es
-      # justamente lo que hay que conservar. El rebase es porque una corrida
-      # dura horas y main puede haber avanzado mientras tanto.
+      # justamente lo que hay que conservar. Y también si se canceló: con
+      # success() || failure() un timeout salteaba el push. El rebase es
+      # porque una corrida dura horas y main puede haber avanzado.
       - name: pushear mejoras aceptadas
-        if: inputs.modo != 'chequeo' && (success() || failure())
+        if: always() && inputs.modo != 'chequeo'
         run: |
           git pull --rebase origin main
           git push

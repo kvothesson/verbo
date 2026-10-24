@@ -52,6 +52,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -122,6 +123,13 @@ CANARIO = "01-crear-script"
 # min y el peor caso acá es mutador + dos suites, así que hay lugar de sobra.
 TIMEOUT_MUTADOR = 2400     # segundos; agotarlo es un veredicto, no un crash
 
+# Presupuesto de la corrida entera. El workflow corta a los 180 min, y cuando
+# cortaba él (18, 20, 22 y 24 de octubre de 2026) se perdía todo: ni bitácora
+# ni push, solo "The operation was canceled". Cortando acá antes, el día queda
+# anotado como SIN TIEMPO y el push alcanza a correr.
+MINUTOS_DEFAULT = 150
+HASTA = None               # epoch límite; lo fija main()
+
 
 class Tee:
     """Duplica stdout al log para que el progreso sea visible desde afuera."""
@@ -130,7 +138,12 @@ class Tee:
         self.pantalla, self.archivo = pantalla, archivo
 
     def write(self, s):
+        # Flush también a pantalla: en Actions stdout es un pipe, va bufferado
+        # en bloques de 8 KB, y al cancelar el job se perdía todo lo que no
+        # había llenado un bloque. Por eso los runs cancelados de octubre de
+        # 2026 parecían colgados justo después del chequeo de proveedores.
         self.pantalla.write(s)
+        self.pantalla.flush()
         self.archivo.write(s)
         self.archivo.flush()
 
@@ -234,6 +247,8 @@ def correr_suite(modelo_agente, reps, pausa, tareas=None):
         cmd += ["-m", modelo_agente]
     for tarea in tareas or []:
         cmd += ["--tarea", tarea]
+    if HASTA:
+        cmd += ["--hasta", str(HASTA)]
     # correr_evals.py hereda el entorno y verbo.py lee VERBO_FALLBACKS: la
     # suite usa su propia cadena, ya filtrada por el chequeo de proveedores.
     entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
@@ -282,13 +297,15 @@ def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
     intercalados por tarea, para que los dos gasten el mismo cupo. Los pares
     en que cualquiera de los dos se quedó sin cupo se descartan juntos: así
     el que tuvo mala suerte con el proveedor no pierde puntos.
-    Devuelve (base, cand, fracción de pares válidos)."""
+    Devuelve (base, cand, fracción de pares válidos, si se cortó por tiempo)."""
     cmd = [sys.executable, str(AQUI / "correr_evals.py"), "-r", str(reps),
            "--pausa", str(pausa), "--contra", str(referencia)]
     if modelo_agente:
         cmd += ["-m", modelo_agente]
     for tarea in tareas or []:
         cmd += ["--tarea", tarea]
+    if HASTA:
+        cmd += ["--hasta", str(HASTA)]
     entorno = {**os.environ, "VERBO_FALLBACKS": CADENA_EVALS}
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -296,6 +313,7 @@ def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
         for linea in p.stdout:
             print("  " + linea.rstrip())
     datos = ultimos_resultados()
+    incompleto = datos.pop("incompleto", False)
     if set(datos) != {"verbo", "contra"}:
         raise SystemExit("la comparación no generó resultados")
     validos = total = 0
@@ -307,7 +325,8 @@ def comparar_suite(modelo_agente, reps, pausa, referencia, tareas=None):
         validos += len(buenos)
         filtrados["verbo"].append({"tarea": t_cand["tarea"], "corridas": [c for c, _ in buenos]})
         filtrados["contra"].append({"tarea": t_base["tarea"], "corridas": [b for _, b in buenos]})
-    return resumir(filtrados["contra"]), resumir(filtrados["verbo"]), validos / max(1, total)
+    return (resumir(filtrados["contra"]), resumir(filtrados["verbo"]),
+            validos / max(1, total), incompleto)
 
 
 def chequear_proveedores(modelos):
@@ -494,9 +513,14 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
     vencido = False
     error = None
     errores = ""
+    # Nunca más que lo que le queda a la corrida: que el mutador se coma el
+    # presupuesto es un SIN MUTACIÓN anotado, no un job cancelado.
+    limite = TIMEOUT_MUTADOR
+    if HASTA:
+        limite = max(60, min(TIMEOUT_MUTADOR, int(HASTA - time.time())))
     try:
         r = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
-                           timeout=TIMEOUT_MUTADOR, encoding="utf-8", errors="replace")
+                           timeout=limite, encoding="utf-8", errors="replace")
         salida = (r.stdout or "").strip()
         # El stderr se tiraba: del 18 de agosto al 16 de octubre de 2026 el
         # mutador murió todos los días a los pocos segundos con un traceback
@@ -515,7 +539,7 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador):
         if isinstance(parcial, bytes):
             parcial = parcial.decode("utf-8", "replace")
         salida = parcial.strip()
-        print(f"  [mutador] se venció el timeout de {TIMEOUT_MUTADOR}s")
+        print(f"  [mutador] se venció el timeout de {limite}s")
     print("  --- mutador (salida completa) ---")
     print("  " + "\n  ".join(salida.splitlines()))
     print("  --- fin mutador ---")
@@ -587,7 +611,11 @@ def main():
                         help="Modelo con el que VERBO edita su genoma")
     parser.add_argument("-r", "--repeticiones", type=int, default=1)
     parser.add_argument("--pausa", type=int, default=15)
+    parser.add_argument("--minutos", type=int, default=MINUTOS_DEFAULT,
+                        help="Presupuesto total de la corrida; lo que no entra queda SIN TIEMPO")
     args = parser.parse_args()
+    global HASTA
+    HASTA = time.time() + args.minutos * 60
 
     sucios = [l for l in git("status", "--porcelain").stdout.splitlines()
               if not l[3:].strip().startswith(("evals/resultados-", "evals/evolucion.log"))]
@@ -596,7 +624,8 @@ def main():
 
     from datetime import datetime
     print(f"\n===== evolución {datetime.now():%Y-%m-%d %H:%M:%S} · "
-          f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} =====")
+          f"agente={args.modelo_agente or '(default)'} · mutador={args.modelo_mutador} · "
+          f"presupuesto={args.minutos} min =====")
 
     # Antes de gastar nada: quién responde hoy. Una llamada mínima por modelo
     # convierte "dos meses de SIN MUTACIÓN" en una línea roja el primer día.
@@ -627,6 +656,7 @@ def main():
     print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
           f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
     sin_cupo = False
+    sin_tiempo = False
     fallo_el_mutador = False
 
     for i in range(1, args.iteraciones + 1):
@@ -703,8 +733,14 @@ def main():
         tareas = tareas_del_filtro(base)
         print(f"[evolucion] filtro barato: {len(tareas)} tareas x1, intercalado "
               f"({', '.join(tareas)})")
-        base_f, cand_f, valida = comparar_suite(args.modelo_agente, 1, args.pausa,
-                                                referencia, tareas)
+        base_f, cand_f, valida, cortado = comparar_suite(args.modelo_agente, 1, args.pausa,
+                                                         referencia, tareas)
+        if cortado:
+            print("[evolucion] el filtro no entró en el presupuesto; no se decide")
+            git("checkout", "--", "verbo.py")
+            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [filtro incompleto]", diff, base_f, cand_f)
+            sin_tiempo = True
+            continue
         if valida < MIN_FRACCION_VALIDA:
             print(f"[evolucion] filtro sin cupo ({valida:.0%} de pares válidos); no se decide")
             git("checkout", "--", "verbo.py")
@@ -721,11 +757,20 @@ def main():
             continue
 
         print("[evolucion] suite completa, intercalada...")
-        nueva_base, cand, valida = comparar_suite(args.modelo_agente, args.repeticiones,
-                                                  args.pausa, referencia)
+        nueva_base, cand, valida, cortado = comparar_suite(args.modelo_agente, args.repeticiones,
+                                                           args.pausa, referencia)
         print(f"[evolucion] candidato: {cand['aciertos']}/{cand['total']} · {cand['tokens']} tokens "
               f"(baseline: {nueva_base['aciertos']}/{nueva_base['total']} · "
               f"{nueva_base['tokens']}) · {valida:.0%} de pares válidos")
+        if cortado:
+            # Medir solo las primeras tareas (en orden alfabético) no es una
+            # muestra de la suite: se anota lo medido pero no se decide.
+            print("[evolucion] la suite no entró en el presupuesto; no se decide")
+            git("checkout", "--", "verbo.py")
+            registrar("SIN TIEMPO PARA MEDIR", f"{razon} [pasó el filtro; suite incompleta]",
+                      diff, nueva_base, cand)
+            sin_tiempo = True
+            continue
         if valida < MIN_FRACCION_VALIDA:
             git("checkout", "--", "verbo.py")
             registrar("SIN CUPO PARA MEDIR", f"{razon} [suite: {valida:.0%} de pares válidos]",
@@ -756,6 +801,10 @@ def main():
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
     if fallo_el_mutador:
         sys.exit("[evolucion] el mutador falló: ver su stderr arriba")
+    if sin_tiempo:
+        # En rojo también: si la suite no entra en el presupuesto hay que
+        # achicarla (menos -r o menos tareas), no esperar a que un día entre.
+        sys.exit("[evolucion] la medición no entró en el presupuesto de tiempo")
     if sin_cupo:
         # En rojo a propósito: un día sin cupo para medir es un problema de
         # capacidad (sumar proveedores), no un veredicto sobre el agente.

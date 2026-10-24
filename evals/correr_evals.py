@@ -16,7 +16,9 @@ Uso:
 """
 import argparse
 import json
+import os
 import re
+import signal
 import sys
 
 try:
@@ -34,6 +36,27 @@ AQUI = Path(__file__).parent
 VERBO = AQUI.parent / "verbo.py"
 TAREAS = AQUI / "tareas"
 TIMEOUT_TAREA = 300
+
+
+def correr_con_timeout(cmd, timeout, cwd):
+    """subprocess.run con timeout, pero matando el ÁRBOL entero. run() mata
+    solo al hijo directo: si el agente dejó corriendo un script o un server,
+    ese nieto sobrevive, sigue comiendo CPU en las tareas siguientes y, si
+    tiene el pipe abierto, deja a communicate() esperando para siempre."""
+    p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, encoding="utf-8", errors="replace",
+                         start_new_session=os.name == "posix")
+    try:
+        out, err = p.communicate(timeout=timeout)
+        return p.returncode, out, err
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            os.killpg(p.pid, signal.SIGKILL)
+        else:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)],
+                           capture_output=True)
+        p.communicate()
+        raise
 
 
 # Lo que imprime verbo.py cuando no le queda ningún modelo con cupo: una
@@ -57,10 +80,9 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
 
     inicio = time.time()
     try:
-        r = subprocess.run(cmd, cwd=sandbox, capture_output=True, text=True,
-                           timeout=TIMEOUT_TAREA, encoding="utf-8", errors="replace")
-        salida_agente = (r.stdout or "") + (r.stderr or "")
-        agente_ok = r.returncode == 0
+        codigo, out, err = correr_con_timeout(cmd, TIMEOUT_TAREA, sandbox)
+        salida_agente = (out or "") + (err or "")
+        agente_ok = codigo == 0
     except subprocess.TimeoutExpired:
         salida_agente = "[timeout del agente]"
         agente_ok = False
@@ -74,11 +96,10 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
     verificacion = ""
     if agente_ok:
         try:
-            v = subprocess.run([sys.executable, str(tarea / "verificar.py")],
-                               cwd=sandbox, capture_output=True, text=True,
-                               timeout=60, encoding="utf-8", errors="replace")
-            paso = v.returncode == 0
-            verificacion = (v.stderr or v.stdout or "").strip()
+            codigo, out, err = correr_con_timeout(
+                [sys.executable, str(tarea / "verificar.py")], 60, sandbox)
+            paso = codigo == 0
+            verificacion = (err or out or "").strip()
         except subprocess.TimeoutExpired:
             paso, verificacion = False, "[timeout de verificación]"
     else:
@@ -110,6 +131,9 @@ def main():
     parser.add_argument("--contra", type=Path,
                         help="Otro verbo.py contra el que comparar: cada corrida de cada "
                              "tarea se mide con los dos seguidos, alternando quién va primero")
+    parser.add_argument("--hasta", type=float,
+                        help="Hora límite (epoch): no se arranca ninguna corrida que, en el "
+                             "peor caso, termine después. Lo que no entró queda sin medir")
     args = parser.parse_args()
 
     modelos = args.modelo or [None]  # None = default de verbo.py
@@ -130,9 +154,14 @@ def main():
         print(f"\n=== Evaluando: {etiqueta} — {len(tareas)} tareas ===")
         resultados = []
         for tarea in tareas:
+            if not entra(args, 1):
+                print(f"  [sin tiempo] quedan sin medir desde {tarea.name}")
+                break
             print(f"  {tarea.name} ... ", end="", flush=True)
             corridas = []
             for i in range(args.repeticiones):
+                if not entra(args, 1):
+                    break
                 es_ultima = tarea == tareas[-1] and i == args.repeticiones - 1
                 res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
                                    puro=args.puro)
@@ -155,6 +184,15 @@ def main():
     guardar(todos)
 
 
+def entra(args, corridas):
+    """¿Entran `corridas` más antes de --hasta, contando cada una en su peor
+    caso? Sin esto la suite intercalada (2 x 13 tareas x 3) no tenía techo y
+    el workflow la cancelaba a las 3 horas sin dejar ni la bitácora."""
+    if not args.hasta:
+        return True
+    return time.time() + corridas * (TIMEOUT_TAREA + 60 + args.pausa) <= args.hasta
+
+
 def guardar(datos):
     archivo = AQUI / f"resultados-{datetime.now():%Y%m%d-%H%M%S}.json"
     archivo.write_text(json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -169,12 +207,17 @@ def comparar(tareas, modelo, args):
     una. Así los dos pagan el mismo desgaste del cupo."""
     lados = {"verbo": VERBO, "contra": args.contra.resolve()}
     resultados = {lado: [] for lado in lados}
+    incompleto = False
     print(f"\n=== Comparando verbo.py contra {args.contra.name} — {len(tareas)} tareas "
           f"x{args.repeticiones}, intercalado ===")
     for tarea in tareas:
         print(f"  {tarea.name} ... ", end="", flush=True)
         corridas = {lado: [] for lado in lados}
         for i in range(args.repeticiones):
+            # Por par: un lado medido sin el otro no sirve para comparar.
+            if not entra(args, 2):
+                incompleto = True
+                break
             orden = ["verbo", "contra"] if i % 2 == 0 else ["contra", "verbo"]
             for lado in orden:
                 es_ultima = (tarea == tareas[-1] and i == args.repeticiones - 1
@@ -193,10 +236,14 @@ def comparar(tareas, modelo, args):
             resultados[lado].append({"tarea": tarea.name,
                                      "aciertos": sum(r["paso"] for r in corridas[lado]),
                                      "corridas": corridas[lado]})
+        if incompleto:
+            print(f"  [sin tiempo] se cortó en {tarea.name}; lo que sigue queda sin medir")
+            break
     for lado in lados:
         ok = sum(t["aciertos"] for t in resultados[lado])
         total = sum(len(t["corridas"]) for t in resultados[lado])
         print(f"  {lado}: {ok}/{total} PASS")
+    resultados["incompleto"] = incompleto
     return resultados
 
 
