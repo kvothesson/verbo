@@ -426,3 +426,6 @@ index bf9514a..b738c96 100644
      # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
      # tarea por terminada, y tiene una vuelta más para verificar o corregir.
 ```
+
+## 2026-10-24 · SIN MUTACIÓN (timeout del mutador)
+- **Intento:** sin explicación del mutador
