@@ -406,3 +406,23 @@ index bf9514a..cc3628b 100644
      # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
      # tarea por terminada, y tiene una vuelta más para verificar o corregir.
 ```
+
+## 2026-10-24 · DESCARTADA EN EL FILTRO
+- **Intento:** Se redujo `max_contexto_chars` a 50000 para limitar el historial y ahorrar más del 10 % de tokens, m [no resolvió ninguna tarea que fallaba ni ahorró tokens]
+- **Medición:** aciertos 1/5 → 1/5 · tokens 8759 → 9725
+- **Diff:**
+```diff
+diff --git a/verbo.py b/verbo.py
+index bf9514a..b738c96 100644
+--- a/verbo.py
++++ b/verbo.py
+@@ -129,7 +129,7 @@ GENOMA = {
+     },
+     "max_turnos": 20,                  # iteraciones del loop agéntico por pedido
+     "max_salida_herramienta": 6000,    # chars que se devuelven al modelo por herramienta
+-    "max_contexto_chars": 60000,       # umbral para compactar historial
++    "max_contexto_chars": 50000,       # umbral para compactar historial
+     "temperatura": 0.2,
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+```
