@@ -438,3 +438,30 @@ index bf9514a..b738c96 100644
 
 ## 2026-10-25 · SIN MUTACIÓN (timeout del mutador)
 - **Intento:** sin explicación del mutador
+
+## 2026-10-25 · REVERTIDA (no superó al baseline)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 1 (p=1.00, hace falta ≤0.05)]
+- **Zonas:** GENOMA:temperatura, MAX_CONTEXTO_CHARS, compactar, ejecutar_herramienta
+- **Medición:** aciertos 9/13 → 8/13 · tokens 163142 → 188910
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -136,4 +136,5 @@
+     "max_salida_herramienta": 6000,    # chars que se devuelven al modelo por herramienta
+     "max_contexto_chars": 60000,       # umbral para compactar historial
++    "max_resultado_herramienta": 4000, # chars que se devuelven al modelo por herramienta
+     "temperatura": 0.2,
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+@@ -144,4 +145,5 @@
+ 
+ MAX_SALIDA_HERRAMIENTA = GENOMA["max_salida_herramienta"]
++MAX_RESULTADO_HERRAMIENTA = GENOMA.get("max_resultado_herramienta", MAX_SALIDA_HERRAMIENTA)
+ MAX_CONTEXTO_CHARS = GENOMA["max_contexto_chars"]
+ MAX_TURNOS = GENOMA["max_turnos"]
+@@ -275,10 +277,10 @@
+             texto = "\n".join(f"{i}\t{l}" for i, l in
+                               enumerate(lineas[desde - 1:hasta], desde))
+-            if len(texto) <= MAX_SALIDA_HERRAMIENTA:
++            if len(text
+```
