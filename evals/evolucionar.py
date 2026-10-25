@@ -891,8 +891,12 @@ def main():
     sin_cupo = sin_tiempo = fallo_el_mutador = False
     costo_iteracion = None
     rechazos_hoy = []
+    ultimo = False
 
     for i in range(1, args.iteraciones + 1):
+        if ultimo:
+            print("\n[evolucion] el mutador se quedó sin cupo: no se arrancan más candidatos")
+            break
         restante = HASTA - time.time()
         reserva = costo_iteracion or ESTIMADO_ITERACION
         if restante < reserva:
@@ -912,11 +916,19 @@ def main():
         zonas = zonas_tocadas(fuente_base, nuevo) if diff else []
 
         if vencido:
-            # Se descarta aunque haya alcanzado a editar: lo cortaron a mitad
-            # de camino, no es un cambio que haya dado por terminado.
-            print("[evolucion] el mutador se quedó sin tiempo; no hay candidato que evaluar")
-            registrar("SIN MUTACIÓN (timeout del mutador)", razon, diff, zonas=zonas)
-            continue
+            # Casi siempre es cupo: el 24/10/2026 los cuatro mutadores de la
+            # corrida pasaron sus 20 min esperando enfriamientos de 20-40 min.
+            # Otro candidato chocaría contra la misma pared: es el último.
+            ultimo = True
+            if not diff:
+                print("[evolucion] el mutador se quedó sin tiempo sin editar nada; no se "
+                      "arrancan más candidatos")
+                registrar("SIN MUTACIÓN (timeout del mutador)", razon, "")
+                break
+            # Lo que alcanzó a editar se mide igual: compilar, el contrato y
+            # la medición lo juzgan. Antes se tiraba y ese trabajo se perdía.
+            print("[evolucion] el mutador se quedó sin tiempo, pero editó: se evalúa lo que dejó")
+            razon = f"{razon} [cortado por tiempo]"
         if error:
             # Un crash no es "no se le ocurrió nada": se anota con su causa y
             # la Action queda en rojo, para que no pase otros dos meses callado.
