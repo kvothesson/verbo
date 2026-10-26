@@ -465,3 +465,29 @@ index bf9514a..b738c96 100644
 -            if len(texto) <= MAX_SALIDA_HERRAMIENTA:
 +            if len(text
 ```
+
+## 2026-10-26 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 0, sin ahorro claro (39594 contra 14520 tokens)]
+- **Zonas:** compactar
+- **Medición:** aciertos 1/5 → 1/5 · tokens 14520 → 39594
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,11 +384,17 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos.
++    Ahora descarta *todos* los resultados de herramientas anteriores al último bloque reciente,
++    no solo los que superan 200 caracteres. Esto reduce drásticamente el contexto y evita
++    sobrecargar el límite de tokens.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
++    # Mantener los últimos 6 mensajes (incluye intera
+```

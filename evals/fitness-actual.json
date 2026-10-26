@@ -97,19 +97,25 @@
  "fallas_recientes": [
   {
    "tarea": "23-bigcodebench-777",
-   "detalle": "3-bigcodebench-777-187_vsca/solucion.py\", line 29, in task_func\n    raise FileNotFoundError(f\"Directory not found: {directory}\")\nFileNotFoundError: Directory not found: /fake/test_zip_dir\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (errors=5)",
-   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2052 caracteres)\n→ editar: solucion.py\n← OK: editado solucion.py"
+   "detalle": "3-bigcodebench-777-cb1lqlxm/solucion.py\", line 30, in task_func\n    raise FileNotFoundError(f\"Directory not found: {directory}\")\nFileNotFoundError: Directory not found: /fake/test_zip_dir\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (errors=5)",
+   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2047 caracteres)"
   },
   {
    "tarea": "24-bigcodebench-771",
-   "detalle": "24-bigcodebench-771-to479b9g/solucion.py\", line 29, in task_func\n    raise ValueError(f\"'{directory}' is not a valid directory\")\nValueError: '/mnt/data/test_data' is not a valid directory\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (errors=5)",
-   "traza": "← OK: escrito /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py\n← OK: escrito /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py\n← OK: escrito /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py (1008 caracteres)\n→ ejecutar: cd /tmp/verbo-eval-24-bigcodebench-771-to479b9g && python3 -c \"\n← [código de salida: 2] (+1 líneas)\n→ escribir: /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py\n← OK: escrito /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py (1008 caracteres)\n→ leer: /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py\n← 1\timport os, tempfile (+34 líneas)\n→ escribir: /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py\n← OK: escrito /tmp/verbo-eval-24-bigcodebench-771-to479b9g/test_solucion.py (1008 caracteres)\n[VERBO se quedó sin tiempo: se terminó antes de la próxima llamada]"
+   "detalle": "[timeout del agente]",
+   "traza": "→ ejecutar: cd /tmp/verbo-eval-24-bigcodebench-771-kyp5p5va && python3 -c \"\n← [código de salida: 2] (+1 líneas)\n→ escribir: test_solucion.py\n← OK: escrito test_solucion.py (1007 caracteres)\n→ ejecutar: cd /tmp/verbo-eval-24-bigcodebench-771-kyp5p5va && python3 test_solucion.py\n← [código de salida: 1] (+4 líneas)\n→ editar: test_solucion.py\n← ERROR: el texto aparece 7 veces. Agregá más contexto para que sea único.\n→ editar: test_solucion.py\n← OK: editado test_solucion.py\n→ ejecutar: cd /tmp/verbo-eval-24-bigcodebench-771-kyp5p5va && python3 test_solucion.py\n← [código de salida: 0] (+6 líneas)\n→ leer: solucion.py\n← 1\timport re (+49 líneas)"
+  },
+  {
+   "tarea": "25-bigcodebench-310",
+   "detalle": "fer: [50.19, 172.34, 89.66] != [50.19, 172.3437, 89.6563]\n\nFirst differing element 1:\n172.34\n172.3437\n\n- [50.19, 172.34, 89.66]\n+ [50.19, 172.3437, 89.6563]\n?               ++      + +\n\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (failures=1)",
+   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2432 caracteres)"
   },
   {
    "tarea": "26-bigcodebench-988",
-   "detalle": "File \"/home/runner/work/verbo/verbo/evals/tareas/26-bigcodebench-988/verificar.py\", line 39, in helper_assert_predicate\n    self.assertTrue(\nAssertionError: False is not true\n\n----------------------------------------------------------------------\nRan 12 tests in 0.006s\n\nFAILED (failures=3, errors=7)",
-   "traza": "→ buscar: task_func\n← (sin coincidencias)\n→ escribir: solucion.py\n← OK: escrito solucion.py (2688 caracteres)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - {'error': {'message': 'Failed to parse tool call arguments as JSON', 'type': 'invalid_request_\n→ escribir: solucion.py\n← OK: escrito solucion.py (2642 caracteres)\n→ ejecutar: python - << 'PY'\n← [código de salida: 0] (+1 líneas)"
+   "detalle": "^^^\n  File \"/tmp/verbo-eval-26-bigcodebench-988-ij2i_75f/solucion.py\", line 34, in task_func\n    raise ValueError(\"No valid predicates provided\")\nValueError: No valid predicates provided\n\n----------------------------------------------------------------------\nRan 12 tests in 0.006s\n\nFAILED (errors=9)",
+   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (1554 caracteres)\n→ ejecutar: python - << 'PY'\n← [código de salida: 0] (+1 líneas)"
   }
  ],
- "medido": "2026-10-25"
+ "medido": "2026-10-25",
+ "fallas_recientes_medidas": "2026-10-26"
 }
