@@ -491,3 +491,30 @@ index bf9514a..b738c96 100644
 -            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
 +    # Mantener los últimos 6 mensajes (incluye intera
 ```
+
+## 2026-10-26 · REVERTIDA (no superó al baseline)
+- **Intento:** Se modificó la función **compactar** para que, cuando el historial supera el límite de tokens, elimi [ganó 0 pares y perdió 1 (p=1.00, hace falta ≤0.05)]
+- **Zonas:** compactar
+- **Medición:** aciertos 10/13 → 9/13 · tokens 209053 → 203592
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,10 +384,14 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos.
++    Ahora descarta *todos* los resultados de herramientas anteriores al último bloque reciente,
++    sin importar su longitud, para reducir drásticamente el contexto y evitar sobrecargar el límite de tokens.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
++    # Mantener los últimos 6 mensajes (incluye interacciones y resultados recientes)
++    for m in mensajes[:-6]:
++        if m.get("role") == "tool":
+  
+```
