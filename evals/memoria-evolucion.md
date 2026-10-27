@@ -518,3 +518,30 @@ index bf9514a..b738c96 100644
 +        if m.get("role") == "tool":
   
 ```
+
+## 2026-10-27 · REVERTIDA (no superó al baseline)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 1 (p=1.00, hace falta ≤0.05)]
+- **Zonas:** compactar
+- **Medición:** aciertos 9/13 → 8/13 · tokens 272005 → 216695
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,14 +384,22 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Si el historial supera el límite, descarta contenido antiguo para ahorrar contexto.
++    Mantiene los últimos 12 mensajes sin cambios; los anteriores se reemplazan por un marcador.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
+-            total = sum(len(str(x.get("content") or "")) for x in mensajes)
+-            if total <= MAX_CONTEXTO_CHARS:
+-                break
++    # Mantener los últimos 12 mens
+```
