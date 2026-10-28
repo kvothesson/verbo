@@ -545,3 +545,30 @@ index bf9514a..b738c96 100644
 -                break
 +    # Mantener los últimos 12 mens
 ```
+
+## 2026-10-28 · REVERTIDA (no superó al baseline)
+- **Intento:** Se mejoró la función **compactar** para que, cuando el historial supera el límite de tokens, descart [ganó 0 pares y perdió 3 (p=1.00, hace falta ≤0.05)]
+- **Zonas:** compactar
+- **Medición:** aciertos 19/26 → 16/26 · tokens 252283 → 312264
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,11 +384,15 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Si el historial supera el límite, descarta contenidos antiguos para ahorrar contexto.
++    Preserva los últimos 12 mensajes y cualquier mensaje de rol "system"; los demás se reemplazan por un marcador.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
++    preservar = 12
++    # Conservar los últimos 'preservar' mensajes y todos los de rol 'system'
++    for m in mensajes[:-preservar]:
++        if m.get("role"
+```
