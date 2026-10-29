@@ -572,3 +572,22 @@ index bf9514a..b738c96 100644
 +    for m in mensajes[:-preservar]:
 +        if m.get("role"
 ```
+
+## 2026-10-29 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 0, sin ahorro claro (36444 contra 23383 tokens)]
+- **Zonas:** compactar
+- **Medición:** aciertos 1/4 → 1/4 · tokens 23383 → 36444
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,4 +384,8 @@
+ 
+ def compactar(mensajes):
++    """Si el historial supera el límite, descarta contenido antiguo para ahorrar contexto.
++    Conserva los últimos 12 mensajes y cualquier mensaje de rol "system"; los demás se reemplazan
++    por un marcador genérico. Esto reduce drásticamente el número de tokens enviados al modelo.
++    """
+     """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+```
