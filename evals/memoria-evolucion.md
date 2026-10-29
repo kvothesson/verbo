@@ -618,3 +618,30 @@ index bf9514a..b738c96 100644
 -            if total <= MAX_CONTEXTO_CHARS:
 -                b
 ```
+
+## 2026-10-29 · SIN TIEMPO PARA MEDIR
+- **Intento:** [groq/openai/gpt-oss-20b rechazó la llamada (413); probando el siguiente] [pasó el filtro; la suite no entró]
+- **Zonas:** compactar, módulo
+- **Medición:** aciertos 1/4 → 1/4 · tokens 70568 → 22856
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,14 +384,22 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Reduce el historial cuando supera MAX_CONTEXTO_CHARS.
++    Conserva los mensajes de rol "system" y los últimos 12 mensajes.
++    Los mensajes más antiguos se eliminan completamente para ahorrar tokens.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
+-            total = sum(len(str(x.get("content") or "")) for x in mensajes)
+-            if total <= MAX_CONTEXTO_CHARS:
++    # Mantener los últimos 12 mensaj
+```
