@@ -645,3 +645,27 @@ index bf9514a..b738c96 100644
 -            if total <= MAX_CONTEXTO_CHARS:
 +    # Mantener los últimos 12 mensaj
 ```
+
+## 2026-10-30 · REVERTIDA (no superó al baseline)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 1 pares y perdió 3 (p=0.94, hace falta ≤0.05)]
+- **Zonas:** HERRAMIENTAS, compactar
+- **Medición:** aciertos 16/26 → 14/26 · tokens 290813 → 231635
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -152,7 +152,7 @@
+         "description": GENOMA["herramientas"]["leer"],
+         "parameters": {"type": "object", "properties": {
+-            "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"},
+-            "desde": {"type": "integer", "description": "Opcional: primera línea a leer (1 = principio)"},
+-            "hasta": {"type": "integer", "description": "Opcional: última línea a leer"}},
++            "ruta": {"type": "string", "description": "Ruta del archivo"},
++            "desde": {"type": "integer", "description": "Opcional: primera línea (1 = inicio)"},
++            "hasta": {"type": "integer", "description": "Opcional: última línea"}},
+             "required": ["ruta"]}}},
+     {"type": "function", "function": {
+@@ -182,6 +182,6 @@
+         "parameters": {"type": "object", "properties": {
+             "texto": {"
+```
