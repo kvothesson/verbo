@@ -726,3 +726,6 @@ index bf9514a..b738c96 100644
 
 ## 2026-10-31 · FALLÓ EL MUTADOR
 - **Intento:** exit 1: ERROR: todos los modelos de la cadena agotaron su límite de tasa y el próximo cupo tarda 23 min. Esperá o agregá otro proveedor con --fallback.
+
+## 2026-10-31 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: ERROR: todos los modelos de la cadena agotaron su límite de tasa y el próximo cupo tarda 32 min. Esperá o agregá otro proveedor con --fallback.
