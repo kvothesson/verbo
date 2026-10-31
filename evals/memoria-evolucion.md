@@ -696,3 +696,30 @@ index bf9514a..b738c96 100644
 -            if total <= MAX_CONTEXTO_CHARS:
 +    # Mantener siempre los mensajes 
 ```
+
+## 2026-10-31 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: ERROR: todos los modelos de la cadena agotaron su límite de tasa y el próximo cupo tarda 9 min. Esperá o agregá otro proveedor con --fallback.
+- **Zonas:** compactar
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,14 +384,29 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Reduce el historial cuando supera MAX_CONTEXTO_CHARS.
++    Conserva los mensajes de rol "system" y los últimos 12 mensajes.
++    Los mensajes más antiguos se reemplazan por un marcador o se descartan.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
+-            total = sum(len(str(x.get("content") or "")) for x in mensajes)
+-            if total <= MAX_CONTEXTO_CHARS:
+-                break
++    # Índice a
+```
