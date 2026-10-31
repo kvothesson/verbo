@@ -669,3 +669,30 @@ index bf9514a..b738c96 100644
          "parameters": {"type": "object", "properties": {
              "texto": {"
 ```
+
+## 2026-10-31 · DESCARTADA EN EL FILTRO
+- **Intento:** Se reemplazó la función **compactar** por una versión que, cuando el historial supera `MAX_CONTEXTO_ [ganó 0 pares y perdió 1, sin ahorro claro (27661 contra 48624 tokens)]
+- **Zonas:** compactar, módulo
+- **Medición:** aciertos 2/5 → 1/5 · tokens 48624 → 27661
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,14 +384,31 @@
+ 
+ def compactar(mensajes):
+-    """Si el historial pesa demasiado, vacía los resultados de herramientas más viejos."""
++    """Reduce el historial cuando supera MAX_CONTEXTO_CHARS.
++    Conserva los mensajes de rol "system" y los últimos 12 mensajes.
++    Los mensajes más antiguos se eliminan completamente para ahorrar tokens.
++    """
+     total = sum(len(str(m.get("content") or "")) for m in mensajes)
+     if total <= MAX_CONTEXTO_CHARS:
+         return
+-    for m in mensajes[:-8]:  # nunca tocar los últimos mensajes
+-        if m.get("role") == "tool" and len(str(m.get("content") or "")) > 200:
+-            m["content"] = "[resultado antiguo descartado para ahorrar contexto]"
+-            total = sum(len(str(x.get("content") or "")) for x in mensajes)
+-            if total <= MAX_CONTEXTO_CHARS:
++    # Mantener siempre los mensajes 
+```
