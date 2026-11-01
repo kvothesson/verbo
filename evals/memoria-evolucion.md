@@ -783,3 +783,32 @@ index bf9514a..b738c96 100644
 -            if total <= MAX_CONTEXTO_CHARS:
 -              
 ```
+
+## 2026-11-01 · SIN TIEMPO PARA MEDIR
+- **Intento:** (sin respuesta) [pasó el filtro; la suite no entró]
+- **Zonas:** compactar
+- **Medición:** aciertos 1/5 → 2/5 · tokens 79577 → 78165
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -384,4 +384,21 @@
+ 
+ def compactar(mensajes):
++    """Reduce el historial cuando supera MAX_CONTEXTO_CHARS.
++    Conserva los mensajes de rol "system" y los últimos 8 mensajes.
++    Los mensajes más antiguos se reemplazan por un marcador para ahorrar tokens.
++    """
++    total = sum(len(str(m.get("content") or "")) for m in mensajes)
++    if total <= MAX_CONTEXTO_CHARS:
++        return
++    # Reemplazar mensajes antiguos (excepto system) por marcador
++    for i, m in enumerate(mensajes[:-8]):
++        if m.get("role") != "system":
++            m["content"] = "[historial truncado]"
++    # Recalcular
++    total = sum(len(str(m.get("content") or "")) for m in mensajes)
++    if total > MAX_CONTEXTO_CHARS:
++        # Si sigue sin caber, eliminar mensajes antiguos por completo
++        mensajes[:] = [m for m in mensajes if m.get("role") == "system" or m in men
+```
