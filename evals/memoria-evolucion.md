@@ -812,3 +812,7 @@ index bf9514a..b738c96 100644
 +        # Si sigue sin caber, eliminar mensajes antiguos por completo
 +        mensajes[:] = [m for m in mensajes if m.get("role") == "system" or m in men
 ```
+
+## 2026-11-02 · REPETIDA
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [cortado por tiempo] [solo toca zonas ya agotadas (compactar)]
+- **Zonas:** compactar
