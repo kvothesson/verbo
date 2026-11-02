@@ -74,10 +74,10 @@ def tapar_secretos(texto):
 
 
 # Líneas de la salida de verbo.py que cuentan qué hizo: herramientas, sus
-# resultados, esperas por cupo y cortes. Es lo que el mutador necesita para
-# entender una falla, y entra en pocos cientos de caracteres.
-PREFIJOS_TRAZA = ("→", "←", "[límite", "[toda la cadena", "[VERBO", "[tool call",
-                  "[contexto", "ERROR")
+# resultados y cortes. Es lo que el mutador necesita para entender una falla, y
+# entra en pocos cientos de caracteres. Las esperas por cupo no van: llenaban
+# las 14 líneas, y el mutador concluía que tenía que achicar el contexto.
+PREFIJOS_TRAZA = ("→", "←", "[VERBO", "[tool call", "[contexto", "ERROR")
 LINEAS_TRAZA = 14
 
 
@@ -87,9 +87,12 @@ def traza_de(salida):
     return "\n".join(lineas[-LINEAS_TRAZA:])
 
 
-# Lo que imprime verbo.py cuando no le queda ningún modelo con cupo: una
-# corrida así no dice nada del agente, solo del proveedor.
-SENIALES_SIN_CUPO = ("agotaron su límite de tasa", "ningún modelo de la cadena está disponible")
+# Lo que imprime verbo.py cuando no le queda ningún modelo con cupo, o cuando se
+# le acabó el tiempo esperándolo: una corrida así no dice nada del agente, solo
+# del proveedor. Hasta noviembre de 2026 la segunda no contaba: de 223 pares no
+# se descartó ninguno, con 25 de 73 fallas distintas por quedarse sin tiempo.
+SENIALES_SIN_CUPO = ("agotaron su límite de tasa", "ningún modelo de la cadena está disponible",
+                     "se quedó sin tiempo: esperando cupo")
 
 
 def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo: Path = None):

@@ -18,10 +18,10 @@ Loop por corrida (varios candidatos, mientras alcance el presupuesto):
   2. si no editó nada, se corta acá: sin candidato no se gasta un token
   3. guardrails baratos: py_compile, genoma válido y con límites, contrato
      de la CLI, tamaño del prompt, nada de red/entorno/tests; y si el cambio
-     repite un intento o solo mueve perillas agotadas, no se mide
+     repite un intento o solo toca zonas agotadas, no se mide
   4. filtro barato: baseline y candidato (copias fuera del repo, donde no
-     ven los tests) intercalados sobre las tareas difíciles más el canario;
-     tiene que ganarle al baseline medido hoy, o ahorrar tokens sin perder
+     ven los tests) intercalados sobre las tareas que a veces falla más el
+     canario; tiene que ganarle al baseline medido hoy
   5. suite completa por RONDAS intercaladas, tantas como entren en el
      tiempo; los pares en que cualquiera se quedó sin cupo se descartan juntos
   6. se acepta con un test de signos sobre los pares (p ≤ 0.05), o por ahorro
@@ -123,6 +123,10 @@ MAX_CHARS_TEXTO_GENOMA = 6000   # reglas + descripciones + cierre (~1.5k tokens)
 # x -r), el candidato corre una vez sobre las tareas que el baseline fallaba
 # más el canario. Cuesta ~1/10 de una suite y descarta lo que no mueve nada.
 CANARIO = "01-crear-script"
+# Tareas que el filtro no mira: nadie las pasó en 54 corridas (24 pide una
+# llamada exacta a open sobre una carpeta simulada, y 26 usa nombres de
+# predicados que el enunciado no da). Ganarlas no depende del agente.
+SIN_SENIAL = {"24-bigcodebench-771", "26-bigcodebench-988"}
 
 # 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
 # servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
@@ -446,29 +450,27 @@ def por_tarea_de(base):
 
 
 def tareas_del_filtro(base):
-    """Las tareas que el baseline pasa a lo sumo un tercio de las veces: ahí
-    un acierto del candidato es señal y no suerte. Si no hay ninguna tan dura,
-    todas las que alguna vez fallaron."""
+    """Las tareas que el baseline a veces falla, sin las que no dan señal. Antes
+    eran solo las más duras, y una mejora en las intermedias pasaba el filtro
+    igual de seguido que un candidato sin ninguna mejora."""
     previas = por_tarea_de(base)
-    duras = [t for t, r in previas.items() if r["aciertos"] * 3 <= r["corridas"]]
-    flojas = [t for t, r in previas.items() if r["aciertos"] < r["corridas"]]
-    return sorted(set((duras or flojas) + [CANARIO]))
+    utiles = [t for t in previas if t not in SIN_SENIAL]
+    flojas = [t for t in utiles if previas[t]["aciertos"] < previas[t]["corridas"]]
+    return sorted(set((flojas or utiles) + [CANARIO]))
 
 
 def pasa_el_filtro(m):
     """El candidato tiene que mantener vivo el canario y además ganarle al
     baseline medido HOY en las mismas tareas (antes se lo comparaba contra el
-    fitness cacheado, de agosto), o gastar claramente menos sin perder nada."""
-    cand, base = m["cand"], m["base"]
+    fitness cacheado, de agosto). Gastar menos ya no alcanza: en una sola ronda
+    es ruido, el 29/10/2026 dio 22856 tokens contra 70568 sin ganar nada."""
+    cand = m["cand"]
     if CANARIO in cand["por_tarea"] and cand["por_tarea"][CANARIO]["aciertos"] == 0:
         return False, "rompió el canario"
     ganados, perdidos = contar(m["pares"])
     if ganados > perdidos:
         return True, f"ganó {ganados} pares y perdió {perdidos}"
-    if perdidos == 0 and ahorra(cand, base):
-        return True, f"gastó {cand['tokens']} tokens contra {base['tokens']}"
-    return False, (f"ganó {ganados} pares y perdió {perdidos}, sin ahorro claro "
-                   f"({cand['tokens']} contra {base['tokens']} tokens)")
+    return False, f"ganó {ganados} pares y perdió {perdidos}"
 
 
 def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechazos_hoy):
@@ -492,7 +494,7 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechaz
     por_zona = fracasos_por_zona(intentos)
     zonas_txt = ", ".join(f"{z} x{n}" for z, n in por_zona.most_common(10))
     bloque_zonas = (f"ZONAS YA PROBADAS SIN ÉXITO: {zonas_txt}.\n"
-                    + (f"PROHIBIDO tocar solo estas perillas: {', '.join(sorted(quem))}.\n" if quem else "")
+                    + (f"AGOTADAS, se descarta sin medir lo que solo toque: {', '.join(sorted(quem))}.\n" if quem else "")
                     ) if zonas_txt else ""
     bloque_hoy = ("HOY YA SE RECHAZARON: " + " | ".join(rechazos_hoy) + "\n") if rechazos_hoy else ""
     genoma = extraer_genoma(fuente)[1]
@@ -501,9 +503,11 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechaz
         "Estás mejorando TU PROPIO código: verbo.py, en el directorio actual, es el agente "
         "que sos. Podés cambiar cualquier parte: el genoma (reglas, descripciones de "
         "herramientas, presupuestos y el mensaje de 'cierre'), y también el motor: el loop "
-        "agéntico, cómo se compacta el historial, cómo se arma el prompt, las herramientas, "
-        "cómo se esperan los límites de tasa. Las fallas por tiempo suelen venir de esperar "
-        "cupo de tokens por minuto: mandar menos contexto por llamada es una palanca real.\n\n"
+        "agéntico, cómo se arma el prompt, las herramientas. Buscá en las trazas de abajo qué "
+        "hizo mal el agente: repetir la misma acción sin cambiar nada, llamadas a herramientas "
+        "inválidas, ediciones que no encuentran el texto, terminar sin probar lo que escribió, "
+        "agregar validaciones que nadie pidió. Antes de cambiar una función, fijate que se "
+        "ejecute en esos casos.\n\n"
         f"Este es tu genoma actual:\n{genoma}\n"
         f"Mapa de verbo.py (líneas: qué hay):\n{mapa_codigo(fuente)}\n\n"
         f"Reporte de tu última evaluación:\n{reporte}\n\n"
@@ -695,6 +699,10 @@ PERILLAS = {f"GENOMA:{k}" for k in ("max_turnos", "max_salida_herramienta",
 
 
 MAX_INTENTOS_PERILLA = 3
+# Lo mismo con el código: del 25/10 al 1/11/2026 los 14 intentos con zona
+# registrada tocaron compactar, que casi nunca llega a actuar. "módulo" no
+# cuenta: es lo que queda fuera de toda función, no una idea que se agote.
+MAX_INTENTOS_ZONA = 5
 
 
 def fracasos_por_zona(intentos):
@@ -705,13 +713,14 @@ def fracasos_por_zona(intentos):
 
 def quemadas(intentos):
     return {z for z, n in fracasos_por_zona(intentos).items()
-            if z in PERILLAS and n >= MAX_INTENTOS_PERILLA}
+            if z != "módulo" and n >= (MAX_INTENTOS_PERILLA if z in PERILLAS else MAX_INTENTOS_ZONA)}
 
 
 def es_repetida(diff, zonas, intentos, quem):
     """Motivo para no gastar una medición en el candidato, o None."""
-    if zonas and set(zonas) <= quem:
-        return f"solo toca perillas ya agotadas ({', '.join(zonas)})"
+    tocadas = set(zonas) - {"módulo"}
+    if tocadas and tocadas <= quem:
+        return f"solo toca zonas ya agotadas ({', '.join(zonas)})"
     agregadas = lineas_agregadas(diff)
     if agregadas and any(agregadas == i["agregadas"] for i in intentos
                          if not i["veredicto"].startswith("ACEPTADA")):
@@ -795,11 +804,12 @@ def reporte_de_fallas(base):
     por_tarea = {}
     for f in fallas:
         por_tarea.setdefault(f["tarea"], []).append(f)
+    es_cupo = ("[límite", "[toda la cadena")  # los fitness guardados todavía las traen
     partes = []
     for tarea, fs in sorted(por_tarea.items()):
         ultima = [l for l in fs[-1]["detalle"].splitlines() if l.strip()][-1:] or [""]
-        traza = fs[-1].get("traza", "")
-        traza = "\n".join("      " + l for l in traza.splitlines()[-8:])
+        traza = [l for l in fs[-1].get("traza", "").splitlines() if not l.startswith(es_cupo)]
+        traza = "\n".join("      " + l for l in traza[-8:])
         partes.append(f"- [{tarea}] x{len(fs)}: {ultima[0].strip()[:150]}"
                       + (f"\n{traza}" if traza else ""))
     texto = ""
@@ -913,7 +923,7 @@ def main():
         intentos = intentos_pasados()
         quem = quemadas(intentos)
         print(f"\n[evolucion] iteración {i}: VERBO se auto-edita con {cadena_mutador[0]}"
-              + (f" (perillas agotadas: {', '.join(sorted(quem))})" if quem else ""))
+              + (f" (zonas agotadas: {', '.join(sorted(quem))})" if quem else ""))
         razon, vencido, error, candidato = mutar_con_verbo(
             cadena_mutador[0], base, cadena_mutador[1:], quem, intentos, rechazos_hoy)
         nuevo = candidato.read_text(encoding="utf-8")
@@ -978,8 +988,8 @@ def main():
             continue
 
         referencia = copia_baseline(fuente_base)
-        # Filtro barato: una ronda intercalada sobre lo que el baseline venía
-        # fallando más el canario. La gran mayoría de las mutaciones no mueve
+        # Filtro barato: una ronda intercalada sobre lo que el baseline a veces
+        # falla más el canario. La gran mayoría de las mutaciones no mueve
         # nada, y descubrirlo con la suite completa costaba el día entero.
         tareas = tareas_del_filtro(base)
         print(f"[evolucion] filtro barato: {len(tareas)} tareas x1, intercalado "
