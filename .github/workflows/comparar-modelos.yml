@@ -1,0 +1,62 @@
+name: comparar-modelos
+
+# Mide modelos aislados (--puro, sin caer a otro) sobre las mismas tareas, para
+# ordenar la cadena con datos. Cada modelo va en su propio job porque Groq limita
+# por modelo. Se corre a mano: pestaña Actions -> comparar-modelos -> Run workflow.
+# No toca el repo: los resultados quedan en el log de cada job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      modelos:
+        description: "Lista JSON de modelos"
+        type: string
+        default: >-
+          ["groq/openai/gpt-oss-120b",
+          "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+          "openrouter/thinkingmachines/inkling:free",
+          "openrouter/cohere/north-mini-code:free",
+          "openrouter/recursive/flint-v1.0:free"]
+      rondas:
+        description: "Corridas por tarea"
+        type: string
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        modelo: ${{ fromJSON(inputs.modelos) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: dependencias
+        run: pip install openai
+
+      # Las tareas que a veces salen y a veces no, más la 01 de control. Las
+      # que pasan o fallan siempre gastarían cupo sin distinguir modelos.
+      - name: medir
+        timeout-minutes: 225
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MODELO: ${{ matrix.modelo }}
+          RONDAS: ${{ inputs.rondas }}
+        run: |
+          python -u evals/correr_evals.py --puro -m "$MODELO" -r "$RONDAS" --pausa 20 \
+            --hasta "$(( $(date +%s) + 210 * 60 ))" \
+            --tarea 01-crear-script --tarea 04-refactor --tarea 06-test-rojo \
+            --tarea 07-codebase-bug --tarea 22-bigcodebench-928 \
+            --tarea 25-bigcodebench-310 --tarea 28-factura-varias-causas \
+            --tarea 29-config-con-herencia

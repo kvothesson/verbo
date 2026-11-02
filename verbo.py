@@ -93,9 +93,12 @@ ESTADISTICAS = {"llamadas": 0, "tokens": 0, "por_modelo": {}}
 #   herramientas los descarta el chequeo (o el primer 4xx de la sesión).
 #   cerebras al final: si el tier gratis vuelve, se aprovecha solo.
 # Sin benchmark propio todavía: el orden es una apuesta a medir.
+# El 2026-11-02 se sacaron nemotron-3-super y laguna (404): ya no existen.
 FALLBACKS_DEFAULT = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
-                     "openrouter/nvidia/nemotron-3-super-120b-a12b:free,"
-                     "openrouter/poolside/laguna-s-2.1:free,"
+                     "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free,"
+                     "openrouter/thinkingmachines/inkling:free,"
+                     "openrouter/cohere/north-mini-code:free,"
+                     "openrouter/recursive/flint-v1.0:free,"
                      "openrouter/google/gemma-4-31b-it:free,"
                      "cerebras/gpt-oss-120b")
 CLIENTES = {}

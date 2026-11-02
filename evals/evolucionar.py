@@ -88,8 +88,10 @@ FITNESS = AQUI / "fitness-actual.json"
 # así que abandonaba sin editar una línea. Cinco "SIN MUTACIÓN" seguidos no
 # fueron falta de ideas, fue falta de cupo. Ahora cada uno tiene su proveedor.
 CADENA_EVALS = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
-                "openrouter/nvidia/nemotron-3-super-120b-a12b:free,"
-                "openrouter/poolside/laguna-s-2.1:free,"
+                "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free,"
+                "openrouter/thinkingmachines/inkling:free,"
+                "openrouter/cohere/north-mini-code:free,"
+                "openrouter/recursive/flint-v1.0:free,"
                 "openrouter/google/gemma-4-31b-it:free")
 # Cerebras era el primario hasta que su tier gratis empezó a devolver 402
 # (2026-08-18). Ojo: groq/openai/gpt-oss-120b también es el modelo principal
@@ -99,11 +101,11 @@ CADENA_EVALS = ("groq/qwen/qwen3.8-27b,groq/openai/gpt-oss-20b,"
 # agota, la suite sigue con CADENA_EVALS.
 MODELO_MUTADOR_DEFAULT = "groq/openai/gpt-oss-120b"
 # gpt-oss-20b tiene cupo propio en Groq (los límites son por modelo).
-# laguna de OpenRouter al final: ahora el mutador lee código y su historial
+# nemotron de OpenRouter al final: ahora el mutador lee código y su historial
 # crece; cuando Groq lo rechaza por tamaño (413, el pedido supera los 8k
 # tokens por minuto) hace falta alguien con más margen donde caer.
 CADENA_MUTADOR = ("groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,"
-                  "openrouter/poolside/laguna-s-2.1:free,cerebras/gpt-oss-120b")
+                  "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free,cerebras/gpt-oss-120b")
 MODELO_SUITE = "groq/openai/gpt-oss-120b"  # el default de verbo.py
 
 # El genoma es lo único que el mutador puede tocar (ver el bloque en verbo.py).

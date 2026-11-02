@@ -213,7 +213,7 @@ def main():
                 res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
                                    puro=args.puro)
                 corridas.append(res)
-                print("P" if res["paso"] else "F", end="", flush=True)
+                print("-" if res["sin_cupo"] else ("P" if res["paso"] else "F"), end="", flush=True)
             aciertos_tarea = sum(r["paso"] for r in corridas)
             seg = sum(r["segundos"] for r in corridas) / len(corridas)
             tok = sum(r["tokens"] for r in corridas) // len(corridas)
@@ -226,7 +226,11 @@ def main():
         total_ok = sum(r["aciertos"] for r in resultados)
         total = sum(len(r["corridas"]) for r in resultados)
         tokens = sum(c["tokens"] for r in resultados for c in r["corridas"])
-        print(f"  TOTAL: {total_ok}/{total} PASS ({100 * total_ok / total:.0f}%) · {tokens} tokens")
+        # Las corridas sin cupo no miden al modelo sino a su límite de tasa.
+        sin_cupo = sum(c["sin_cupo"] for r in resultados for c in r["corridas"])
+        validas = total - sin_cupo
+        print(f"  TOTAL: {total_ok}/{validas} PASS ({100 * total_ok / max(1, validas):.0f}%) · "
+              f"{tokens} tokens · {sin_cupo} sin cupo")
         todos[etiqueta] = resultados
     guardar(todos)
 

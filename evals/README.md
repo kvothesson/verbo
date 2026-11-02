@@ -19,6 +19,9 @@ python correr_evals.py -r 3                             # 3 corridas por tarea (
 python correr_evals.py -r 3 --contra /tmp/viejo/verbo.py  # A/B intercalado contra otra versión
 ```
 
+Para comparar modelos en la nube, con las keys del repo y un job por modelo, está
+el workflow `comparar-modelos`, que se lanza a mano desde la pestaña Actions.
+
 Con `--contra`, cada corrida de cada tarea se mide con las dos versiones
 seguidas, alternando cuál va primero, para que compartan el mismo desgaste del
 cupo gratis. Se mide por rondas (todas las tareas una vez, después otra), así
