@@ -132,11 +132,11 @@ CANARIO = "01-crear-script"
 # rangos con el mapa del código en vez del archivo entero.
 TIMEOUT_MUTADOR = 1200     # segundos; agotarlo es un veredicto, no un crash
 
-# Presupuesto de la corrida entera. El workflow corta a los 180 min, y cuando
+# Presupuesto de la corrida entera. El workflow corta a los 270 min, y cuando
 # cortaba él (18, 20, 22 y 24 de octubre de 2026) se perdía todo: ni bitácora
 # ni push, solo "The operation was canceled". Cortando acá antes, el día queda
 # anotado como SIN TIEMPO y el push alcanza a correr.
-MINUTOS_DEFAULT = 150
+MINUTOS_DEFAULT = 240
 HASTA = None               # epoch límite; lo fija main()
 
 
@@ -830,9 +830,14 @@ def copia_baseline(fuente):
     return ruta
 
 
-# Lo que se reserva para una iteración antes de arrancarla, si todavía no se
-# midió ningún filtro en esta corrida (el del 24/10/2026 tardó 34 min).
+# Lo que se reserva para mutar y filtrar un candidato, si todavía no se midió
+# ningún filtro en esta corrida (el del 24/10/2026 tardó 34 min).
 ESTIMADO_ITERACION = 40 * 60
+# Y lo que se reserva para que, si pasa el filtro, entre una ronda de la suite.
+# Sin esto el tiempo se iba en candidatos descartados y el que pasaba perdía su
+# ronda a la mitad: el 29/10 y el 1/11/2026 (peor ronda vista: 13 pares de 9 min
+# más los 13 min que correr_evals exige libres para arrancar el último par).
+RESERVA_RONDA = 130 * 60
 
 
 def main():
@@ -888,7 +893,7 @@ def main():
         guardar_fitness(base)
     print(f"[evolucion] fitness de referencia: {base['aciertos']}/{base['total']} · "
           f"{base['tokens']} tokens (medido {base.get('medido', 'recién')})")
-    sin_cupo = sin_tiempo = fallo_el_mutador = False
+    sin_cupo = sin_tiempo = fallo_el_mutador = mutador_sin_cupo = hubo_medicion = False
     costo_iteracion = None
     rechazos_hoy = []
     ultimo = False
@@ -898,10 +903,10 @@ def main():
             print("\n[evolucion] el mutador se quedó sin cupo: no se arrancan más candidatos")
             break
         restante = HASTA - time.time()
-        reserva = costo_iteracion or ESTIMADO_ITERACION
+        reserva = (costo_iteracion or ESTIMADO_ITERACION) + RESERVA_RONDA
         if restante < reserva:
-            print(f"\n[evolucion] quedan {restante / 60:.0f} min y una iteración se lleva "
-                  f"~{reserva / 60:.0f}: no se arranca otra")
+            print(f"\n[evolucion] quedan {restante / 60:.0f} min y un candidato con su ronda "
+                  f"se lleva ~{reserva / 60:.0f}: no se arranca otro")
             break
         inicio_iteracion = time.time()
         fuente_base = ARCHIVO_VERBO.read_text(encoding="utf-8")
@@ -929,6 +934,14 @@ def main():
             # la medición lo juzgan. Antes se tiraba y ese trabajo se perdía.
             print("[evolucion] el mutador se quedó sin tiempo, pero editó: se evalúa lo que dejó")
             razon = f"{razon} [cortado por tiempo]"
+        if error and "agotaron su límite de tasa" in error:
+            # Cupo, no crash: el 31/10/2026 los tres mutadores siguientes se
+            # estrellaron contra la misma pared y un día con un candidato ya
+            # medido quedó en rojo. Otro intento no cambia nada.
+            print(f"[evolucion] el mutador se quedó sin cupo; no se arrancan más candidatos ({error})")
+            registrar("SIN CUPO PARA MUTAR", error, diff, zonas=zonas)
+            mutador_sin_cupo = True
+            break
         if error:
             # Un crash no es "no se le ocurrió nada": se anota con su causa y
             # la Action queda en rojo, para que no pase otros dos meses callado.
@@ -984,6 +997,8 @@ def main():
                       diff, zonas=zonas)
             sin_cupo = True
             continue
+        hubo_medicion = True
+        costo_iteracion = time.time() - inicio_iteracion
         paso, detalle = pasa_el_filtro(f)
         print(f"[evolucion] filtro: {'PASA' if paso else 'NO PASA'} — {detalle} "
               f"(candidato {f['cand']['aciertos']}/{f['cand']['total']} · {f['cand']['tokens']} tok, "
@@ -992,7 +1007,6 @@ def main():
             registrar("DESCARTADA EN EL FILTRO", f"{razon} [{detalle}]", diff,
                       f["base"], f["cand"], zonas=zonas)
             rechazos_hoy.append(f"{razon[:60]} (filtro: {detalle[:50]})")
-            costo_iteracion = time.time() - inicio_iteracion
             continue
 
         print("[evolucion] suite completa, intercalada por rondas...")
@@ -1033,11 +1047,12 @@ def main():
                       s["base"], s["cand"], zonas=zonas)
             rechazos_hoy.append(f"{razon[:60]} (suite: {detalle[:50]})")
             base = s["base"]
-        costo_iteracion = time.time() - inicio_iteracion
 
     print(f"\n[evolucion] FIN · fitness final: {base['aciertos']}/{base['total']} · {base['tokens']} tokens")
     if fallo_el_mutador:
         sys.exit("[evolucion] el mutador falló: ver su stderr arriba")
+    if mutador_sin_cupo and not hubo_medicion:
+        sys.exit("[evolucion] el mutador no tuvo cupo y hoy no se midió nada: hacen falta más proveedores")
     if sin_tiempo:
         # En rojo también: si la medición no entra en el presupuesto hay que
         # achicarla (menos rondas o menos tareas), no esperar a que un día entre.

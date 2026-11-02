@@ -106,7 +106,7 @@ a mano sin entender el resto del archivo.
 La evolución automática ([`evals/evolucionar.py`](evals/evolucionar.py),
 todos los días en GitHub Actions) puede cambiar el genoma y también el resto
 de `verbo.py`: el loop, la compactación del historial, las herramientas. Cada
-día prueba hasta 4 candidatos en 150 minutos. Un filtro barato compara cada
+día prueba hasta 4 candidatos en 240 minutos. Un filtro barato compara cada
 uno contra el código actual en las tareas que venía fallando, y solo si le
 gana se paga la suite completa. Se acepta con un test de signos (p ≤ 0.05) o
 si ahorra tokens sin perder nada. Cada intento, aceptado o no, queda en la
