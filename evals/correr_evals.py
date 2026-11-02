@@ -144,8 +144,9 @@ def correr_tarea(tarea: Path, modelo: str, pausa: int, puro: bool = False, verbo
         time.sleep(pausa)
 
     sin_cupo = not paso and any(s in salida_agente for s in SENIALES_SIN_CUPO)
+    espera = re.search(r"próximo cupo tarda (\d+) min", salida_agente)
     return {"tarea": tarea.name, "paso": paso, "segundos": round(duracion, 1),
-            **stats, "sin_cupo": sin_cupo,
+            **stats, "sin_cupo": sin_cupo, "cupo_en_min": int(espera.group(1)) if espera else None,
             # Sin stats confiables: un candidato que se cuelga más no puede
             # "ahorrar tokens" gracias a los 0 de las corridas matadas.
             "matado": matado, "sin_tiempo": codigo == 3,
@@ -166,6 +167,9 @@ def main():
     parser.add_argument("--puro", action="store_true",
                         help="Desactiva la cadena de fallbacks: mide cada modelo aislado "
                              "(sin esto, un 429 haría que otro modelo resuelva la tarea)")
+    parser.add_argument("--esperar-cupo", action="store_true",
+                        help="Si una corrida muere sin cupo, esperarlo y repetirla (hasta "
+                             f"{REINTENTOS_CUPO} veces y sin pasarse de --hasta)")
     parser.add_argument("--contra", type=Path,
                         help="Otro verbo.py contra el que comparar: cada corrida de cada "
                              "tarea se mide con los dos seguidos, alternando quién va primero")
@@ -212,6 +216,16 @@ def main():
                 es_ultima = tarea == tareas[-1] and i == args.repeticiones - 1
                 res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
                                    puro=args.puro)
+                # El 2/11/2026 gpt-oss-120b usó 11 min de sus 3 horas y media: al
+                # primer enfriamiento largo, el resto de la lista murió en segundos.
+                for _ in range(REINTENTOS_CUPO if args.esperar_cupo else 0):
+                    espera = (res["cupo_en_min"] or ESPERA_CUPO_MIN) * 60 + 30
+                    if not res["sin_cupo"] or (args.hasta and time.time() + espera + TIMEOUT_TAREA > args.hasta):
+                        break
+                    print(f"[esperando cupo {espera / 60:.0f} min]", end=" ", flush=True)
+                    time.sleep(espera)
+                    res = correr_tarea(tarea, modelo, 0 if es_ultima else args.pausa,
+                                       puro=args.puro)
                 corridas.append(res)
                 print("-" if res["sin_cupo"] else ("P" if res["paso"] else "F"), end="", flush=True)
             aciertos_tarea = sum(r["paso"] for r in corridas)
@@ -236,6 +250,8 @@ def main():
 
 
 COSTO_DEFAULT = 180   # segundos estimados por corrida si no se pasa --costo
+REINTENTOS_CUPO = 3
+ESPERA_CUPO_MIN = 5   # si el proveedor no dice cuánto falta
 
 
 def entra(args, corridas, peor_caso=True):

@@ -2,7 +2,9 @@ name: comparar-modelos
 
 # Mide modelos aislados (--puro, sin caer a otro) sobre las mismas tareas, para
 # ordenar la cadena con datos. Cada modelo va en su propio job porque Groq limita
-# por modelo. Se corre a mano: pestaña Actions -> comparar-modelos -> Run workflow.
+# por modelo. Los :free de OpenRouter parecen compartir cupo por cuenta: el 2/11/2026,
+# en paralelo, entre cuatro midieron 7 corridas. Conviene mandarlos de a uno.
+# Se corre a mano: pestaña Actions -> comparar-modelos -> Run workflow.
 # No toca el repo: los resultados quedan en el log de cada job.
 
 on:
@@ -13,10 +15,8 @@ on:
         type: string
         default: >-
           ["groq/openai/gpt-oss-120b",
-          "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
-          "openrouter/thinkingmachines/inkling:free",
-          "openrouter/cohere/north-mini-code:free",
-          "openrouter/recursive/flint-v1.0:free"]
+          "groq/qwen/qwen3.8-27b",
+          "openrouter/cohere/north-mini-code:free"]
       rondas:
         description: "Corridas por tarea"
         type: string
@@ -54,7 +54,7 @@ jobs:
           MODELO: ${{ matrix.modelo }}
           RONDAS: ${{ inputs.rondas }}
         run: |
-          python -u evals/correr_evals.py --puro -m "$MODELO" -r "$RONDAS" --pausa 20 \
+          python -u evals/correr_evals.py --puro -m "$MODELO" -r "$RONDAS" --pausa 20 --esperar-cupo \
             --hasta "$(( $(date +%s) + 210 * 60 ))" \
             --tarea 01-crear-script --tarea 04-refactor --tarea 06-test-rojo \
             --tarea 07-codebase-bug --tarea 22-bigcodebench-928 \

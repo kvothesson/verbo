@@ -185,8 +185,10 @@ def archivos_sin_trackear():
             if l.startswith("??")}
 
 
-def leer_memoria():
-    """Últimos intentos, del más reciente al más viejo, acotados en contexto."""
+def leer_memoria(agotadas=frozenset()):
+    """Últimos intentos, del más reciente al más viejo, acotados en contexto.
+    Sin los de zonas agotadas: el 2/11/2026, avisado de que compactar estaba
+    agotada, el mutador igual copió el diff de compactar que tenía a la vista."""
     if not MEMORIA.is_file():
         return ""
     entradas = [e for e in MEMORIA.read_text(encoding="utf-8").split("\n## ") if e.strip()]
@@ -195,6 +197,12 @@ def leer_memoria():
     # intentos con diff o medición y las notas del mantenimiento.
     entradas = [e for e in entradas if "**Diff:**" in e or "**Medición:**" in e
                 or "NOTA DEL MANTENIMIENTO" in e or "Por qué NO sirve" in e]
+
+    def de_zona_agotada(e):
+        m = re.search(r"\*\*Zonas:\*\* (.+)", e)
+        zonas = {z.strip() for z in m.group(1).split(",")} - {"módulo"} if m else set()
+        return zonas and zonas <= agotadas
+    entradas = [e for e in entradas if not de_zona_agotada(e)]
     recientes = [e if e.startswith("## ") else "## " + e
                  for e in entradas[-MEMORIA_ENTRADAS:]][::-1]
     texto = ""
@@ -487,14 +495,14 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechaz
     reporte += ("FALLAS OBSERVADAS (con la traza de lo que hiciste):\n" + fallas) if fallas else \
         "Sin fallas: el objetivo es reducir el consumo de tokens sin romper nada."
 
-    memoria = leer_memoria()
+    memoria = leer_memoria(quem)
     bloque_memoria = (
         "INTENTOS ANTERIORES (tu memoria; lo descartado ya se probó y no funcionó, "
         "no lo repitas ni lo deshagas):\n\n" + memoria + "\n\n") if memoria else ""
     por_zona = fracasos_por_zona(intentos)
     zonas_txt = ", ".join(f"{z} x{n}" for z, n in por_zona.most_common(10))
     bloque_zonas = (f"ZONAS YA PROBADAS SIN ÉXITO: {zonas_txt}.\n"
-                    + (f"AGOTADAS, se descarta sin medir lo que solo toque: {', '.join(sorted(quem))}.\n" if quem else "")
+                    + (f"NO EDITES {', '.join(sorted(quem))}: un cambio que solo toque eso se descarta sin medir.\n" if quem else "")
                     ) if zonas_txt else ""
     bloque_hoy = ("HOY YA SE RECHAZARON: " + " | ".join(rechazos_hoy) + "\n") if rechazos_hoy else ""
     genoma = extraer_genoma(fuente)[1]
@@ -509,7 +517,7 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechaz
         "agregar validaciones que nadie pidió. Antes de cambiar una función, fijate que se "
         "ejecute en esos casos.\n\n"
         f"Este es tu genoma actual:\n{genoma}\n"
-        f"Mapa de verbo.py (líneas: qué hay):\n{mapa_codigo(fuente)}\n\n"
+        f"Mapa de verbo.py (líneas: qué hay):\n{mapa_codigo(fuente, quem)}\n\n"
         f"Reporte de tu última evaluación:\n{reporte}\n\n"
         f"{bloque_memoria}{bloque_zonas}{bloque_hoy}\n"
         "Aplicá UNA mejora coherente (puede ser más de una edición) que ataque la causa "
@@ -523,8 +531,8 @@ def mutar_con_verbo(modelo_mutador, base, cadena_mutador, quem, intentos, rechaz
         "prompt_sistema() y HERRAMIENTAS siguen existiendo y juntos pesan menos de "
         f"{MAX_CHARS_PROMPT} caracteres; nada de red, ni os.environ, ni exec/eval nuevos.\n"
         "Cómo trabajar: leé con 'leer' (usando desde/hasta, NO el archivo entero) solo lo que "
-        "vas a cambiar, y editá con 'editar' copiando EXACTO el texto a reemplazar. Al final "
-        "explicá la mejora en una línea."
+        "vas a cambiar, y editá con 'editar' copiando EXACTO el texto a reemplazar. Después de "
+        "editar no vuelvas a leer: terminá y explicá la mejora en una línea."
     )
     limite = TIMEOUT_MUTADOR
     if HASTA:
@@ -780,15 +788,18 @@ def contrato(candidato, fuente_vieja):
     return None
 
 
-def mapa_codigo(fuente):
+def mapa_codigo(fuente, agotadas=frozenset()):
     """Índice de verbo.py para el mutador: qué hay en cada rango de líneas.
     El archivo entero no entra en los 8k tokens por minuto de Groq gratis; con
-    esto sabe qué leer con leer(desde, hasta) en vez de leerlo todo."""
+    esto sabe qué leer con leer(desde, hasta) en vez de leerlo todo. Las zonas
+    agotadas no figuran: el mapa también es una lista de ideas."""
     lineas = []
     constantes = []
     arbol = ast.parse(fuente)
     for n in arbol.body:
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if n.name in agotadas:
+                continue
             doc = (ast.get_docstring(n) or "").strip().splitlines()
             lineas.append(f"  {n.lineno}-{n.end_lineno} {n.name}: {doc[0][:90] if doc else ''}")
         elif isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name):
