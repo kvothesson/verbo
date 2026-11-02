@@ -1,0 +1,1 @@
+Este proyecto calcula facturas y test_factura.py falla al ejecutarlo. Las reglas de negocio están en los docstrings: el código tiene que cumplirlas. Puede haber más de una causa repartida en varios archivos. Arreglá el código hasta que el test pase, sin modificar test_factura.py.

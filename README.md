@@ -119,10 +119,10 @@ del prompt (6.000 caracteres entre prompt y herramientas).
 
 ## Evals
 
-El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 12 tareas
-con verificación automática — 6 agénticas (arreglar bugs, refactors
+El repo incluye una mini-suite estilo SWE-bench en [`evals/`](evals/): 13 tareas
+con verificación automática — 9 agénticas (arreglar bugs, refactors
 multi-archivo, bugs enterrados en codebases, TDD, tests rojos con detector de
-trampa) y 6 de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench),
+trampa) y 4 de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench),
 el benchmark 2024 donde los mejores modelos rondan 30-40% de pass rate.
 Soporta corridas repetidas (`-r 3`) para medir varianza y `--puro` para
 comparar modelos aislados sin fallbacks.

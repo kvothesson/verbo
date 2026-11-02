@@ -49,13 +49,17 @@ tokens y llamadas por tarea — para comparar modelos con números.
 | 06 | test-rojo | Arreglar código para que pase un test — **con detector de trampa**: si el agente modifica el test en vez del código, FAIL |
 | 07 | codebase-bug | Bug enterrado en una codebase de 4 archivos: solo se da el síntoma, el agente debe navegar el código y localizarlo |
 | 08 | tdd-carrito | TDD puro: los tests existen, la clase no. Implementar desde la spec implícita en los tests, sin tocarlos (hash-check anti-trampa) |
-| 21-26 | bigcodebench-* | 6 problemas de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench) (Apache 2.0), el benchmark 2024 donde los mejores modelos rondan 30-40%: specs largas con varias librerías stdlib y casos borde traicioneros. El agente no ve los tests |
+| 21-25 | bigcodebench-* | 4 problemas de [BigCodeBench-Hard](https://github.com/bigcode-project/bigcodebench) (Apache 2.0), el benchmark 2024 donde los mejores modelos rondan 30-40%: specs largas con varias librerías stdlib y casos borde traicioneros. El agente no ve los tests |
+| 28 | factura-varias-causas | Cuatro causas repartidas en varios archivos: el test visible frena en la primera, y hay reglas de los docstrings que solo se chequean en la verificación. Mide si el agente itera ejecutando y lee las reglas |
+| 29 | config-con-herencia | Escribir desde cero con una especificación completa de 8 reglas: la verificación no exige nada que el enunciado no diga. Mide si prueba lo que escribe |
 | 27 | edicion-sin-cadaveres | Nacida de una sesión real: arreglar un bug de rotación exige no solo que funcione, sino que el archivo quede **sin código inalcanzable ni definiciones duplicadas** — el verificador parsea el AST. Castiga el modo de falla de insertar la versión nueva de una función sin borrar la vieja |
 
 La suite se poda con datos: las tareas que ningún modelo de la cadena fallaba
 (fizzbuzz, csv, casos-borde y todo HumanEval — incluso sus 6 problemas más
 duros terminaron 11/11) fueron retiradas para no gastar tokens en mediciones
-sin información. Historial completo en git.
+sin información. También se retiraron dos de BigCodeBench que nadie pasó en 54
+corridas, porque sus tests exigían detalles que el enunciado no da. Las tareas
+más útiles son las que a veces salen y a veces no. Historial completo en git.
 
 ## Importar más de HumanEval
 

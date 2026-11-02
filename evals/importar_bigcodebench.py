@@ -13,6 +13,8 @@ El subset curado (evals/bigcodebench/subset.json) contiene solo problemas que:
   - no tocan red ni recursos del sistema (sin ftplib/socket/subprocess/...)
   - validan localmente: solución canónica PASS, stub FAIL, tests < 15s
 
+RETIRADOS quedan en el subset para que las demás conserven su número.
+
 Uso: python importar_bigcodebench.py
 Idempotente: pisa las carpetas 21-bigcodebench-* si ya existen.
 """
@@ -23,6 +25,9 @@ AQUI = Path(__file__).parent
 SUBSET = AQUI / "bigcodebench" / "subset.json"
 TAREAS = AQUI / "tareas"
 NUMERO_INICIAL = 21
+# 0 aciertos en 54 corridas: 771 exige una llamada exacta a open sobre una
+# carpeta simulada, y 988 usa nombres de predicados que el enunciado no da.
+RETIRADOS = {"BigCodeBench/771", "BigCodeBench/988"}
 
 PLANTILLA_PROMPT = """Resolvé el siguiente problema de BigCodeBench (benchmark público del BigCode Project). Guardá tu implementación en un archivo llamado solucion.py. Tu código será verificado con tests que no ves: cubrí los casos borde de la especificación.
 
@@ -47,6 +52,8 @@ if __name__ == "__main__":
 def generar():
     problemas = json.loads(SUBSET.read_text(encoding="utf-8"))
     for i, p in enumerate(problemas):
+        if p["task_id"] in RETIRADOS:
+            continue
         n = NUMERO_INICIAL + i
         numero = p["task_id"].split("/")[-1]
         carpeta = TAREAS / f"{n:02d}-bigcodebench-{numero}"

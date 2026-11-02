@@ -123,10 +123,6 @@ MAX_CHARS_TEXTO_GENOMA = 6000   # reglas + descripciones + cierre (~1.5k tokens)
 # x -r), el candidato corre una vez sobre las tareas que el baseline fallaba
 # más el canario. Cuesta ~1/10 de una suite y descarta lo que no mueve nada.
 CANARIO = "01-crear-script"
-# Tareas que el filtro no mira: nadie las pasó en 54 corridas (24 pide una
-# llamada exacta a open sobre una carpeta simulada, y 26 usa nombres de
-# predicados que el enunciado no da). Ganarlas no depende del agente.
-SIN_SENIAL = {"24-bigcodebench-771", "26-bigcodebench-988"}
 
 # 600s eran la herencia de cuando el mutador arrancaba sin cupo y moría rápido:
 # servían de corte de pérdidas. Con proveedor propio el mutador SÍ trabaja, y
@@ -450,13 +446,15 @@ def por_tarea_de(base):
 
 
 def tareas_del_filtro(base):
-    """Las tareas que el baseline a veces falla, sin las que no dan señal. Antes
-    eran solo las más duras, y una mejora en las intermedias pasaba el filtro
-    igual de seguido que un candidato sin ninguna mejora."""
+    """Las tareas que el baseline a veces falla, más las que todavía no midió.
+    Antes eran solo las más duras, y una mejora en las intermedias pasaba el
+    filtro igual de seguido que un candidato sin ninguna mejora. El fitness
+    guardado puede nombrar tareas que ya no están en la suite: esas no van."""
     previas = por_tarea_de(base)
-    utiles = [t for t in previas if t not in SIN_SENIAL]
-    flojas = [t for t in utiles if previas[t]["aciertos"] < previas[t]["corridas"]]
-    return sorted(set((flojas or utiles) + [CANARIO]))
+    existentes = sorted(t.name for t in (AQUI / "tareas").iterdir() if t.is_dir())
+    utiles = [t for t in existentes
+              if t not in previas or previas[t]["aciertos"] < previas[t]["corridas"]]
+    return sorted(set((utiles or existentes) + [CANARIO]))
 
 
 def pasa_el_filtro(m):

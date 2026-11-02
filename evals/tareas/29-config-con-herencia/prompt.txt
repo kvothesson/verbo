@@ -1,0 +1,10 @@
+Escribí en solucion.py una función leer_config(texto) que recibe el contenido de un archivo de configuración como string y devuelve un dict de secciones: {seccion: {clave: valor}}. Probala antes de terminar. Las reglas son estas, y no hay otras:
+
+1. Las líneas en blanco se ignoran. También las que, sin contar espacios iniciales, empiezan con # o con ;
+2. [nombre] abre una sección. Las claves anteriores a la primera sección van a la sección "general", que solo aparece en el resultado si tiene claves. Si una sección se repite, sus claves se suman a las que ya tenía.
+3. clave = valor se corta en el primer =. Se sacan los espacios de los dos lados, y la clave pasa a minúsculas. Si una clave se repite en la misma sección, gana la última.
+4. Un valor entre comillas dobles conserva su contenido tal cual, incluidos espacios y #, sin las comillas. En un valor sin comillas, " #" (espacio y numeral) y todo lo que le sigue es un comentario y se descarta.
+5. [hija : madre] hace que hija herede las claves de madre, y las suyas pisan a las heredadas. La madre puede estar definida más abajo en el archivo y también puede heredar de otra.
+6. ${clave} se reemplaza por el valor de esa clave en la sección que lo usa, contando las heredadas. ${seccion.clave} toma el valor de otra sección. Funciona con comillas y sin comillas, y puede encadenarse: un valor referido puede tener a su vez referencias. Una clave heredada se resuelve en el contexto de la hija: si madre tiene url = ${host} y la hija define host, la hija usa su host.
+7. Después de resolver las referencias, un valor sin comillas que sea exactamente true o false pasa a bool (sin distinguir mayúsculas), y uno que sea un entero, con signo opcional, pasa a int. Un valor entre comillas siempre queda str. Una referencia inserta el texto del valor referido.
+8. Lanzá ValueError si: una línea no es ninguna de las anteriores (el mensaje tiene que incluir "línea N", contando desde 1), la madre no existe, la herencia tiene un ciclo, una referencia apunta a algo que no existe, o las referencias tienen un ciclo.
