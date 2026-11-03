@@ -816,3 +816,29 @@ index bf9514a..b738c96 100644
 ## 2026-11-02 · REPETIDA
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [cortado por tiempo] [solo toca zonas ya agotadas (compactar)]
 - **Zonas:** compactar
+
+## 2026-11-03 · REVERTIDA (rompe el contrato)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [cortado por tiempo] [agrega '\brequests\b' (vigilado: tests, red, entorno o código dinámico)]
+- **Zonas:** turno
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -524,4 +524,39 @@
+                 print(f"  [tool call inválido del modelo; corrigiendo... ({motivo})]")
+                 time.sleep(2)
++                # Eliminar el mensaje del asistente que contenía la llamada inválida
++                if mensajes and mensajes[-1].get("role") == "assistant":
++                    mensajes.pop()
++                nombres = [h["function"]["name"]
++                           for h in estado.get("herramientas", HERRAMIENTAS)]
++                mensajes.append({"role": "user", "content":
++                    "[sistema] Tu llamada a herramienta fue inválida. Las únicas herramientas "
++                    f"disponibles son: {', '.join(nombres)}. Reintentá."})
++                continue
++            raise
++        msg = respuesta.choices[0].message
++
++        if not msg.tool_calls:
++            mensajes.append({"role": "assistant
+```
