@@ -21,6 +21,16 @@ on:
         description: "Corridas por tarea"
         type: string
         default: "2"
+      tareas:
+        description: "Tareas separadas por espacio"
+        type: string
+        # Las que a veces salen y a veces no, más la 01 de control. Las que pasan
+        # o fallan siempre gastarían cupo sin distinguir modelos. El cupo diario
+        # de Groq se acaba antes del final: el 2/11/2026 la 28 y la 29 no corrieron.
+        default: >-
+          01-crear-script 04-refactor 06-test-rojo 07-codebase-bug
+          22-bigcodebench-928 25-bigcodebench-310
+          28-factura-varias-causas 29-config-con-herencia
 
 permissions:
   contents: read
@@ -43,8 +53,6 @@ jobs:
       - name: dependencias
         run: pip install openai
 
-      # Las tareas que a veces salen y a veces no, más la 01 de control. Las
-      # que pasan o fallan siempre gastarían cupo sin distinguir modelos.
       - name: medir
         timeout-minutes: 225
         env:
@@ -53,10 +61,9 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           MODELO: ${{ matrix.modelo }}
           RONDAS: ${{ inputs.rondas }}
+          TAREAS: ${{ inputs.tareas }}
         run: |
+          args=()
+          for t in $TAREAS; do args+=(--tarea "$t"); done
           python -u evals/correr_evals.py --puro -m "$MODELO" -r "$RONDAS" --pausa 20 --esperar-cupo \
-            --hasta "$(( $(date +%s) + 210 * 60 ))" \
-            --tarea 01-crear-script --tarea 04-refactor --tarea 06-test-rojo \
-            --tarea 07-codebase-bug --tarea 22-bigcodebench-928 \
-            --tarea 25-bigcodebench-310 --tarea 28-factura-varias-causas \
-            --tarea 29-config-con-herencia
+            --hasta "$(( $(date +%s) + 210 * 60 ))" "${args[@]}"
