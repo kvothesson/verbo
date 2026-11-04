@@ -842,3 +842,20 @@ index bf9514a..b738c96 100644
 +        if not msg.tool_calls:
 +            mensajes.append({"role": "assistant
 ```
+
+## 2026-11-04 · DESCARTADA EN EL FILTRO
+- **Intento:** **Resumen:** Se arregló la herramienta `buscar` para aceptar archivos como parámetro `ruta` (usa su  [ganó 1 pares y perdió 1]
+- **Zonas:** ejecutar_herramienta
+- **Medición:** aciertos 4/7 → 4/7 · tokens 112343 → 82595
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -336,4 +336,6 @@
+             ext = args.get("extension") or ""
+             base = Path(args.get("ruta") or ".")
++            if base.is_file():
++                base = base.parent
+             if not base.is_dir():
+                 return f"ERROR: no existe el directorio {base}"
+```
