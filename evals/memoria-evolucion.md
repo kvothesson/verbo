@@ -859,3 +859,34 @@ index bf9514a..b738c96 100644
              if not base.is_dir():
                  return f"ERROR: no existe el directorio {base}"
 ```
+
+## 2026-11-05 · SIN CUPO PARA MEDIR
+- **Intento:** Ahora se valida y re-serializa cada `arguments` antes de agregarlo al historial: si es JSON válido s [suite: 69% de pares válidos]
+- **Zonas:** turno
+- **Medición:** aciertos 8/9 → 8/9 · tokens 63471 → 64812
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -546,11 +546,21 @@
+             print(f"  {msg.content.strip()[:300]}")
+ 
++        # Sanitizar tool_calls: el modelo a veces devuelve JSON inválido en arguments.
++        # Si lo guardamos tal cual, la próxima llamada a la API falla con 400.
++        tool_calls_sanitizados = []
++        for tc in msg.tool_calls:
++            try:
++                args = json.loads(tc.function.arguments or "{}")
++                args_json = json.dumps(args, ensure_ascii=False)
++            except json.JSONDecodeError:
++                args_json = "{}"
++            tool_calls_sanitizados.append({
++                "id": tc.id, "type": "function",
++                "function": {"name": tc.function.name, "arguments": args_json},
++            })
+         mensajes.append({
+             "role": "assistant",
+             "content": msg.content or "",
+-            "tool_calls": [{
+-
+```
