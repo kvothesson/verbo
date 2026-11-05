@@ -890,3 +890,23 @@ index bf9514a..b738c96 100644
 -            "tool_calls": [{
 -
 ```
+
+## 2026-11-05 · SIN CUPO PARA MUTAR
+- **Intento:** exit 1: ERROR: todos los modelos de la cadena agotaron su límite de tasa y el próximo cupo tarda 276 min. Esperá o agregá otro proveedor con --fallback.
+- **Zonas:** ejecutar_herramienta
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -336,7 +336,10 @@
+             ext = args.get("extension") or ""
+             base = Path(args.get("ruta") or ".")
++            if base.is_file():
++                base = base.parent
+             if not base.is_dir():
+                 return f"ERROR: no existe el directorio {base}"
+             coincidencias = []
++
+             for archivo in sorted(base.rglob("*")):
+                 if set(archivo.parts) & {".git", "__pycache__", "node_modules", ".venv", "venv"}:
+```
