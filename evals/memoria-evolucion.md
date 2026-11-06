@@ -910,3 +910,28 @@ index bf9514a..b738c96 100644
              for archivo in sorted(base.rglob("*")):
                  if set(archivo.parts) & {".git", "__pycache__", "node_modules", ".venv", "venv"}:
 ```
+
+## 2026-11-06 · SIN CUPO PARA MEDIR
+- **Intento:** " [suite: 54% de pares válidos]
+- **Zonas:** ejecutar_herramienta
+- **Medición:** aciertos 12/14 → 14/14 · tokens 201244 → 166650
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -290,4 +290,14 @@
+         if nombre == "escribir":
+             ruta = Path(args["ruta"])
++            # Si el archivo ya existe y su contenido es idéntico, no lo sobrescribimos
++            if ruta.is_file() and ruta.read_text(encoding="utf-8", errors="replace") == args["contenido"]:
++                return f"OK: ya está escrito {ruta} ({len(args['contenido'])} caracteres)"
++            # Si es código Python, validar sintaxis antes de sobrescribir
++            if ruta.suffix == ".py":
++                try:
++                    compile(args["contenido"], str(ruta), "exec")
++                except SyntaxError as e:
++                    return (f"ERROR: el contenido a escribir tiene error de sintaxis "
++                            f"(línea {e.lineno}: {e.msg}). NO se aplicó.")
+             ruta.parent.mkdir(parents=True, exist_ok=True)
+             ruta.wr
+```
