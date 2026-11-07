@@ -962,3 +962,28 @@ index bf9514a..b738c96 100644
      for _ in range(MAX_TURNOS):
          if LIMITE
 ```
+
+## 2026-11-07 · SIN CUPO PARA MEDIR
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [suite: 31% de pares válidos]
+- **Zonas:** turno
+- **Medición:** aciertos 4/4 → 4/4 · tokens 8834 → 12872
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -524,4 +524,20 @@
+                 print(f"  [tool call inválido del modelo; corrigiendo... ({motivo})]")
+                 time.sleep(2)
++                # Sanitizar tool_calls ya presentes en el historial (asistente
++                # previo) para que el próximo intento no falle por JSON inválido.
++                for m in mensajes:
++                    if m.get("role") == "assistant" and m.get("tool_calls"):
++                        tool_calls_sanitizados = []
++                        for tc in m["tool_calls"]:
++                            try:
++                                args = json.loads(tc["function"]["arguments"] or "{}")
++                                args_json = json.dumps(args, ensure_ascii=False)
++                            except json.JSONDecodeError:
++                                args_json = "{}"
++                            tool_ca
+```
