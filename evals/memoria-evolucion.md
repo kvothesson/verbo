@@ -935,3 +935,30 @@ index bf9514a..b738c96 100644
              ruta.parent.mkdir(parents=True, exist_ok=True)
              ruta.wr
 ```
+
+## 2026-11-07 · DESCARTADA EN EL FILTRO
+- **Intento:** 2. **Detección de bucles de herramienta repetida (líneas 515, 566-570)**: Agrega `last_tool_call` qu [ganó 0 pares y perdió 1]
+- **Zonas:** ejecutar_herramienta, turno
+- **Medición:** aciertos 4/7 → 3/7 · tokens 101307 → 57413
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -323,5 +323,9 @@
+                     nuevos = _cadaveres(nuevo)
+                     if len(nuevos) > len(_cadaveres(contenido)):
+-                        return (f"ERROR: esta edición dejaría {nuevos[0]}. NO se "
++                        if nuevos:
++                            detalle = nuevos[0]
++                        else:
++                            detalle = 'código muerto'
++                        return (f"ERROR: esta edición dejaría {detalle}. NO se "
+                                 "aplicó. Probablemente insertaste la versión nueva "
+                                 "sin borrar la vieja: incluí el bloque viejo "
+@@ -509,4 +513,5 @@
+     """Un pedido del usuario: itera hasta que el modelo deja de pedir herramientas."""
+     cierre_pendiente = bool(GENOMA["cierre"])
++    last_tool_call = None
+     for _ in range(MAX_TURNOS):
+         if LIMITE
+```
