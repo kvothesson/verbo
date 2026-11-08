@@ -987,3 +987,28 @@ index bf9514a..b738c96 100644
 +                                args_json = "{}"
 +                            tool_ca
 ```
+
+## 2026-11-08 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 1]
+- **Zonas:** turno
+- **Medición:** aciertos 4/7 → 3/7 · tokens 65020 → 68951
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -509,4 +509,5 @@
+     """Un pedido del usuario: itera hasta que el modelo deja de pedir herramientas."""
+     cierre_pendiente = bool(GENOMA["cierre"])
++    invalid_attempts = 0  # contador de intentos de tool call inválidos en este turno
+     for _ in range(MAX_TURNOS):
+         if LIMITE and time.time() > LIMITE:
+@@ -517,15 +518,20 @@
+         except BadRequestError as e:
+             # Algunos proveedores (Groq) devuelven 400 si el modelo alucina una
+-            # herramienta inexistente o genera un tool call malformado;
+-            # se lo devolvemos para que se corrija. El sleep evita ráfagas de
+-            # 400+429 retroalimentándose contra el límite de requests/minuto.
++            # herramienta inexistente o genera un tool call malformado; manejamos
++            # el error para evitar bucles infinitos.
+             if "tool" in str(e).lower() 
+```
