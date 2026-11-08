@@ -127,18 +127,18 @@
  "fallas_recientes": [
   {
    "tarea": "23-bigcodebench-777",
-   "detalle": "-23-bigcodebench-777-9_jjtuy_/solucion.py\", line 30, in task_func\n    raise ValueError(f\"'{directory}' is not a valid directory\")\nValueError: '/fake/test_zip_dir' is not a valid directory\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (errors=5)",
-   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2107 caracteres)"
+   "detalle": "[timeout del agente]",
+   "traza": "→ escribir: /tmp/verbo-eval-23-bigcodebench-777-mxqoj4sz/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-mxqoj4sz/solucion.py (1008 caracteres)\n→ ejecutar: cat > /tmp/verbo-eval-23-bigcodebench-777-mxqoj4sz/solucion.py << 'PYEOF'\n← [código de salida: 0] (+1 líneas)\n→ leer: /tmp/verbo-eval-23-bigcodebench-777-mxqoj4sz/solucion.py\n← 1\timport re (+27 líneas)\n→ ejecutar: python3 -c \"\n← [código de salida: 2] (+1 líneas)\n→ ejecutar: python3 << 'PYEOF'\n← [código de salida: 1] (+4 líneas)\n→ ejecutar: python3 -c \"\n← [código de salida: 2] (+1 líneas)\n→ ejecutar: python3 -c \"\n← [código de salida: 2] (+1 líneas)"
+  },
+  {
+   "tarea": "25-bigcodebench-310",
+   "detalle": "rk/verbo/verbo/evals/tareas/25-bigcodebench-310/verificar.py\", line 13, in tearDown\n    os.remove(self.filename)\nFileNotFoundError: [Errno 2] No such file or directory: 'test_header.csv'\n\n----------------------------------------------------------------------\nRan 5 tests in 0.001s\n\nFAILED (errors=10)",
+   "traza": "← 36\t        'Mitchell', 'Carter', 'Roberts']\n→ leer: /tmp/verbo-eval-25-bigcodebench-310-gibxi6vh/solucion.py\n← 36\t        'Mitchell', 'Carter', 'Roberts']\n→ leer: /tmp/verbo-eval-25-bigcodebench-310-gibxi6vh/solucion.py\n← 1\timport os (+35 líneas)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Parsing failed. The model generated output that could not be parsed. Please adjust your prompt\n→ leer: /tmp/verbo-eval-25-bigcodebench-310-gibxi6vh/solucion.py\n← 28\t    last_names = [ (+8 líneas)\n→ leer: /tmp/verbo-eval-25-bigcodebench-310-gibxi6vh/solucion.py\n← 1\timport os (+35 líneas)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Parsing failed. The model generated output that could not be parsed. Please adjust your prompt\n→ leer: /tmp/verbo-eval-25-bigcodebench-310-gibxi6vh/solucion.py\n← 1\timport os (+35 líneas)\n[VERBO se quedó sin tiempo: se terminó antes de la próxima llamada]"
   },
   {
    "tarea": "28-factura-varias-causas",
-   "detalle": "-causas-e97c9t67/test_factura.py\", line 10, in <module>\n    a.agregar(\"tuerca\", 1)\n  File \"/tmp/verbo-eval-28-factura-varias-causas-e97c9t67/pedido.py\", line 11, in agregar\n    self.lineas.append((producto, cantidad))\n    ^^^^^^^^^^^^^^^^^^\nAttributeError: 'NoneType' object has no attribute 'append'",
-   "traza": "← OK: editado descuentos.py\n→ ejecutar: python - <<'PY'\n← [código de salida: 1] (+6 líneas)\n→ leer: pedido.py\n← 1\tclass Pedido: (+8 líneas)\n→ editar: pedido.py\n← OK: editado pedido.py\n→ leer: pedido.py\n← 1\tclass Pedido: (+10 líneas)\n→ leer: pedido.py\n← 1\tclass Pedido: (+10 líneas)\n→ leer: pedido.py\n← 4\t    def __init__(self, cliente, lineas=None): (+5 líneas)\n[VERBO alcanzó el máximo de iteraciones para este pedido]"
-  },
-  {
-   "tarea": "29-config-con-herencia",
-   "detalle": "[timeout del agente]",
-   "traza": "← OK: escrito solucion.py (4682 caracteres)\n→ ejecutar: python3 - <<'PY'\n← [código de salida: 1] (+6 líneas)\n→ editar: solucion.py\n← OK: editado solucion.py\n→ leer: solucion.py\n← 1\timport re (+140 líneas)\n→ editar: solucion.py\n← OK: editado solucion.py\n→ ejecutar: python3 - <<'PY'\n← [código de salida: 1] (+6 líneas)\n→ leer: solucion.py\n← 1\timport re (+134 líneas)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Parsing failed. The model generated output that could not be parsed. Please adjust your prompt"
+   "detalle": " sigue fallando: {r.stderr}\"\n           ^^^^^^^^^^^^^^^^^\nAssertionError: el test sigue fallando: Traceback (most recent call last):\n  File \"/tmp/verbo-eval-28-factura-varias-causas-dc0dz9hg/test_factura.py\", line 18, in <module>\n    assert total(c) == 1436\n           ^^^^^^^^^^^^^^^^\nAssertionError",
+   "traza": "← [código de salida: 1] (+5 líneas)\n→ editar: ./pedido.py\n← OK: editado pedido.py\n→ ejecutar: python3 test_factura.py\n← [código de salida: 1] (+5 líneas)\n→ ejecutar: python3 -c \"from factura import neto_linea; print(neto_linea('tornillo', 10))\"\n← [código de salida: 0] (+1 líneas)\n→ editar: ./factura.py\n← OK: editado factura.py\n→ ejecutar: python3 test_factura.py\n← [código de salida: 1] (+5 líneas)\n→ ejecutar: python3 -c \"from factura import total; from pedido import Pedido; c = Pedido('carla'); c.agregar('tornillo', 10); print(total(c))\"\n← [código de salida: 0] (+1 líneas)\n[VERBO alcanzó el máximo de iteraciones para este pedido]"
   }
  ],
  "medido": "2026-10-30",

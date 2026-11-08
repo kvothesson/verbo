@@ -1012,3 +1012,19 @@ index bf9514a..b738c96 100644
 +            # el error para evitar bucles infinitos.
              if "tool" in str(e).lower() 
 ```
+
+## 2026-11-08 · SIN CUPO PARA MEDIR
+- **Intento:** La edición se aplicó correctamente. La nueva regla 10 en el genoma ataca directamente la causa raíz  [suite: 15% de pares válidos]
+- **Zonas:** GENOMA:reglas
+- **Medición:** aciertos 2/2 → 2/2 · tokens 4267 → 4055
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -128,4 +128,5 @@
+         "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+         "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
++        "No leas el mismo archivo dos veces seguidas sin hacer una edición o búsqueda en el medio; si necesitás más contexto, usá 'desde' y 'hasta'.",
+     ],
+     "herramientas": {
+```
