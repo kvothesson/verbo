@@ -1028,3 +1028,20 @@ index bf9514a..b738c96 100644
      ],
      "herramientas": {
 ```
+
+## 2026-11-10 · SIN CUPO PARA MEDIR
+- **Intento:** Listo. El cambio activa el mecanismo de "cierre" existente (líneas 537-540) con un mensaje que ataca [suite: 62% de pares válidos]
+- **Zonas:** GENOMA:cierre
+- **Medición:** aciertos 14/16 → 13/16 · tokens 149737 → 274840
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -142,5 +142,5 @@
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+-    "cierre": "",
++    "cierre": "Antes de terminar: ejecutá los tests o verificá que tu solución funciona. No leas archivos que ya leíste; si necesitás más contexto, usá 'desde'/'hasta'. Las únicas herramientas válidas son: leer, escribir, editar, ejecutar, buscar. Si tu último tool call falló, corregilo ahora.",
+ }
+ # <<< GENOMA
+```
