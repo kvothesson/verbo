@@ -1045,3 +1045,7 @@ index bf9514a..b738c96 100644
  }
  # <<< GENOMA
 ```
+
+## 2026-11-10 · REPETIDA
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [cortado por tiempo] [solo toca zonas ya agotadas (turno)]
+- **Zonas:** turno
