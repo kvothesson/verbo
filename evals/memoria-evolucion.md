@@ -1077,3 +1077,6 @@ index bf9514a..b738c96 100644
      ],
      "herramientas": {
 ```
+
+## 2026-11-12 · SIN MUTACIÓN
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
