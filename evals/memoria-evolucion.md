@@ -1061,3 +1061,19 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-11 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-12 · DESCARTADA EN EL FILTRO
+- **Intento:** Agregué la regla 10 al genoma: "Generá JSON válido en los argumentos de las herramientas: claves ent [ganó 0 pares y perdió 1]
+- **Zonas:** GENOMA:reglas
+- **Medición:** aciertos 4/7 → 3/7 · tokens 100789 → 76455
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -128,4 +128,5 @@
+         "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+         "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
++        "Generá JSON válido en los argumentos de las herramientas: claves entre comillas dobles, sin comas finales, escapá comillas dentro de strings.",
+     ],
+     "herramientas": {
+```
