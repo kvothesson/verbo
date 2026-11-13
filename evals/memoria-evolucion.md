@@ -1101,3 +1101,6 @@ index bf9514a..b738c96 100644
 -                                "sin borrar la vieja: incluí el bloque viejo "
 -                              
 ```
+
+## 2026-11-13 · SIN MUTACIÓN (timeout del mutador)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
