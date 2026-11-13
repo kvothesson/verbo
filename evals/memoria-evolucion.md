@@ -1080,3 +1080,24 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-12 · SIN MUTACIÓN
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
+
+## 2026-11-13 · SIN CUPO PARA MEDIR
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [suite: 50% de pares válidos]
+- **Zonas:** GENOMA:reglas, ejecutar_herramienta
+- **Medición:** aciertos 11/13 → 11/13 · tokens 108980 → 108734
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -128,4 +128,5 @@
+         "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+         "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
++        "Si una edición falla por 'código inalcanzable' o 'definición duplicada', leé el archivo y en el próximo intento incluí en 'buscar' la función/bloque ENTERO que querés reemplazar, no solo unas líneas.",
+     ],
+     "herramientas": {
+@@ -325,6 +326,7 @@
+                         return (f"ERROR: esta edición dejaría {nuevos[0]}. NO se "
+                                 "aplicó. Probablemente insertaste la versión nueva "
+-                                "sin borrar la vieja: incluí el bloque viejo "
+-                              
+```
