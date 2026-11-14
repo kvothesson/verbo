@@ -1104,3 +1104,20 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-13 · SIN MUTACIÓN (timeout del mutador)
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
+
+## 2026-11-14 · SIN CUPO PARA MEDIR
+- **Intento:** Agregué un mensaje de **cierre** que obliga al agente a verificar su trabajo ejecutando el código/te [suite: 62% de pares válidos]
+- **Zonas:** GENOMA:cierre
+- **Medición:** aciertos 14/16 → 13/16 · tokens 175176 → 254495
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -142,5 +142,5 @@
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+-    "cierre": "",
++    "cierre": "Antes de terminar, VERIFICÁ tu trabajo: ejecutá el código/tests para confirmar que funciona. Si hay errores, corregilos. Solo respondé 'OK' si todo pasa.",
+ }
+ # <<< GENOMA
+```

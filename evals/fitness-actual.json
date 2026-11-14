@@ -127,25 +127,25 @@
  "fallas_recientes": [
   {
    "tarea": "23-bigcodebench-777",
-   "detalle": "/x64/lib/python3.12/unittest/mock.py\", line 960, in assert_called_once_with\n    raise AssertionError(msg)\nAssertionError: Expected 'ZipFile' to be called once. Called 0 times.\n\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nFAILED (failures=3, errors=1)",
-   "traza": "← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n→ escribir: /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py\n← OK: escrito /tmp/verbo-eval-23-bigcodebench-777-jmweu6oj/solucion.py (1008 caracteres)\n[VERBO se quedó sin tiempo: se terminó antes de la próxima llamada]"
+   "detalle": "3-bigcodebench-777-yo_9qywg/solucion.py\", line 32, in task_func\n    raise FileNotFoundError(f\"Directory not found: {directory}\")\nFileNotFoundError: Directory not found: /fake/test_zip_dir\n\n----------------------------------------------------------------------\nRan 5 tests in 0.004s\n\nFAILED (errors=5)",
+   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (1648 caracteres)"
   },
   {
    "tarea": "25-bigcodebench-310",
-   "detalle": "er: [53.52, 174.64, 87.57] != [53.52, 174.63830000000002, 87.5729]\n\nFirst differing element 1:\n174.64\n174.63830000000002\n\n- [53.52, 174.64, 87.57]\n+ [53.52, 174.63830000000002, 87.5729]\n\n----------------------------------------------------------------------\nRan 5 tests in 0.004s\n\nFAILED (failures=1)",
-   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2507 caracteres)\n→ ejecutar: cd /tmp/verbo-eval-25-bigcodebench-310-4jq5qag9 && python3 -c \"\n← [código de salida: 0] (+7 líneas)"
+   "detalle": "4] != [51.02, 174.0168, 88.3356]\n\nFirst differing element 1:\n174.02\n174.0168\n\n- [51.02, 174.02, 88.34]\n?              ^      ^\n\n+ [51.02, 174.0168, 88.3356]\n?              ^^^      ^^^\n\n\n----------------------------------------------------------------------\nRan 5 tests in 0.003s\n\nFAILED (failures=1)",
+   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (2152 caracteres)"
   },
   {
-   "tarea": "27-edicion-sin-cadaveres",
-   "detalle": "st recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/27-edicion-sin-cadaveres/verificar.py\", line 11, in <module>\n    assert str(p.imagen()) != antes, \"rotar() no cambia la imagen (pieza I)\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: rotar() no cambia la imagen (pieza I)",
-   "traza": "→ leer: juego.py\n← 1\tFORMAS = [ (+19 líneas)"
+   "tarea": "28-factura-varias-causas",
+   "detalle": "    ^^^^^^^^^^^^^^^^^\nAssertionError: el test sigue fallando: Traceback (most recent call last):\n  File \"/tmp/verbo-eval-28-factura-varias-causas-g8hxny_a/test_factura.py\", line 14, in <module>\n    assert neto_linea(\"tornillo\", 10) == 1187\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError",
+   "traza": "← ERROR: esta edición dejaría código inalcanzable tras un return/raise (línea 27). NO se aplicó. Probablemente insertaste la versión nueva sin borrar la\n→ leer: factura.py\n← 1\tfrom catalogo import precio (+26 líneas)\n→ editar: factura.py\n← OK: editado factura.py\n→ leer: pedido.py\n← 1\tclass Pedido: (+8 líneas)\n→ editar: pedido.py\n← OK: editado pedido.py\n→ ejecutar: python -m unittest test_factura.py -v\n← [código de salida: 1] (+22 líneas)\n→ leer: descuentos.py\n← 1\tdef porcentaje_volumen(cantidad): (+6 líneas)\n[VERBO alcanzó el máximo de iteraciones para este pedido]"
   },
   {
    "tarea": "29-config-con-herencia",
-   "detalle": "[timeout del agente]",
-   "traza": "→ editar: solucion.py\n← ERROR: esta edición dejaría código inalcanzable tras un return/raise (línea 110). NO se aplicó. Probablemente insertaste la versión nueva sin borrar l\n→ leer: solucion.py\n← 90\t    # Resolve variables (+40 líneas)\n→ editar: solucion.py\n← OK: editado solucion.py\n→ ejecutar: python3 solucion.py\n← [código de salida: 0] (+1 líneas)\n→ editar: solucion.py\n← OK: editado solucion.py\n→ ejecutar: python3 solucion.py\n← [código de salida: 1] (+26 líneas)\n→ leer: solucion.py\n← 60\t (+70 líneas)"
+   "detalle": "back (most recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/29-config-con-herencia/verificar.py\", line 4, in <module>\n    from solucion import leer_config\n  File \"/tmp/verbo-eval-29-config-con-herencia-cx2zddk8/solucion.py\", line 35\n    if no\n         ^\nSyntaxError: expected ':'",
+   "traza": "← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n→ escribir: solucion.py\n← OK: escrito solucion.py (1008 caracteres)\n[VERBO se quedó sin tiempo: se terminó antes de la próxima llamada]"
   }
  ],
  "medido": "2026-10-30",
- "fallas_recientes_medidas": "2026-11-12"
+ "fallas_recientes_medidas": "2026-11-14"
 }
