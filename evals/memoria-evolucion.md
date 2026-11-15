@@ -1143,3 +1143,22 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-15 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-15 · DESCARTADA EN EL FILTRO
+- **Intento:** El problema raíz: el modelo no internaliza que `escribir` **sobrescribe** y que debe leer antes de r [ganó 1 pares y perdió 1]
+- **Zonas:** GENOMA:herramientas, GENOMA:reglas
+- **Medición:** aciertos 3/6 → 3/6 · tokens 146611 → 140205
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -128,8 +128,9 @@
+         "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+         "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
++        "NO escribas el mismo archivo dos veces seguidas: 'escribir' SOBREESCRIBE. Si ya escribiste, leé el archivo antes de volver a tocarlo.",
+     ],
+     "herramientas": {
+         "leer": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+-        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
++        "escribir": "Crea un archivo NUEVO o SOBREESCRIBE uno existente (pierde el contenido anterior). Si el archiv
+```
