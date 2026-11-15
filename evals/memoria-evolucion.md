@@ -1137,3 +1137,6 @@ index bf9514a..b738c96 100644
 +          "para verificar su contenido. Repetir 'escribir' en el mismo archivo sin cambios es un error."
      )
 ```
+
+## 2026-11-15 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
