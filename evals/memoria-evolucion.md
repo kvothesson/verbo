@@ -1121,3 +1121,19 @@ index bf9514a..b738c96 100644
  }
  # <<< GENOMA
 ```
+
+## 2026-11-15 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 2]
+- **Zonas:** prompt_sistema
+- **Medición:** aciertos 5/7 → 3/7 · tokens 45654 → 131804
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -211,4 +211,6 @@
+         "Reglas:\n"
+         + "\n".join(f"{i}. {regla}" for i, regla in enumerate(GENOMA["reglas"], 1))
++        + "\n\nIMPORTANTE: Si ya escribiste un archivo, NO lo vuelvas a escribir sin antes leerlo "
++          "para verificar su contenido. Repetir 'escribir' en el mismo archivo sin cambios es un error."
+     )
+```
