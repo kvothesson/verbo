@@ -1162,3 +1162,6 @@ index bf9514a..b738c96 100644
 -        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
 +        "escribir": "Crea un archivo NUEVO o SOBREESCRIBE uno existente (pierde el contenido anterior). Si el archiv
 ```
+
+## 2026-11-16 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
