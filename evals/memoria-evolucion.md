@@ -1165,3 +1165,7 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-16 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-16 · REPETIDA
+- **Intento:** La edición se aplicó correctamente. El cambio agrega un fallback en la herramienta `editar`: cuando  [solo toca zonas ya agotadas (ejecutar_herramienta)]
+- **Zonas:** ejecutar_herramienta
