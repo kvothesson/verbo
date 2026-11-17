@@ -1169,3 +1169,22 @@ index bf9514a..b738c96 100644
 ## 2026-11-16 · REPETIDA
 - **Intento:** La edición se aplicó correctamente. El cambio agrega un fallback en la herramienta `editar`: cuando  [solo toca zonas ya agotadas (ejecutar_herramienta)]
 - **Zonas:** ejecutar_herramienta
+
+## 2026-11-17 · SIN CUPO PARA MEDIR
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [suite: 69% de pares válidos]
+- **Zonas:** GENOMA:herramientas, GENOMA:reglas
+- **Medición:** aciertos 15/18 → 15/18 · tokens 436597 → 230351
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -128,9 +128,10 @@
+         "Tras renombrar algo o cambiar una interfaz, usá 'buscar' para encontrar todas las referencias restantes antes de dar por terminado.",
+         "Al reemplazar un bloque de código, incluí en 'buscar' el bloque viejo COMPLETO: si solo insertás la versión nueva, la vieja queda como código muerto.",
++        "NO escribas el mismo archivo dos veces seguidas: 'escribir' SOBREESCRIBE. Si ya escribiste, leé el archivo antes de volver a tocarlo.",
+     ],
+     "herramientas": {
+         "leer": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+-        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
+-        "editar": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo e
+```
