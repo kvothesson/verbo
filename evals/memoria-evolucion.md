@@ -1188,3 +1188,6 @@ index bf9514a..b738c96 100644
 -        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
 -        "editar": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo e
 ```
+
+## 2026-11-17 · SIN MUTACIÓN (timeout del mutador)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
