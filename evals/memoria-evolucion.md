@@ -1195,3 +1195,7 @@ index bf9514a..b738c96 100644
 ## 2026-11-18 · REPETIDA
 - **Intento:** sin explicación del mutador [solo toca zonas ya agotadas (ejecutar_herramienta)]
 - **Zonas:** ejecutar_herramienta
+
+## 2026-11-18 · REPETIDA
+- **Intento:** La mejora está aplicada. Agregué detección de repeticiones idénticas de herramienta en `turno()`: si [solo toca zonas ya agotadas (turno)]
+- **Zonas:** turno
