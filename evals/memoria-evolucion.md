@@ -1219,3 +1219,7 @@ index bf9514a..b738c96 100644
              ruta = Path(args["ruta"])
              ruta.parent.mkdir(parents=True, exist_ok=
 ```
+
+## 2026-11-18 · REPETIDA
+- **Intento:** ``` [solo toca zonas ya agotadas (ejecutar_herramienta)]
+- **Zonas:** ejecutar_herramienta
