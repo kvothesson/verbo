@@ -1199,3 +1199,23 @@ index bf9514a..b738c96 100644
 ## 2026-11-18 · REPETIDA
 - **Intento:** La mejora está aplicada. Agregué detección de repeticiones idénticas de herramienta en `turno()`: si [solo toca zonas ya agotadas (turno)]
 - **Zonas:** turno
+
+## 2026-11-18 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/openai/gpt-oss-20b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 2]
+- **Zonas:** GENOMA:herramientas, ejecutar_herramienta
+- **Medición:** aciertos 4/7 → 2/7 · tokens 129805 → 62209
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -131,5 +131,5 @@
+     "herramientas": {
+         "leer": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+-        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
++        "escribir": "Crea un archivo NUEVO o SOBREESCRIBE uno existente (pierde el contenido anterior). Si el archivo YA TIENE ese contenido exacto, NO lo sobrescribe y avisa: leé antes de volver a tocarlo.",
+         "editar": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo entero.",
+         "ejecutar": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+@@ -291,4 +291,11 @@
+             ruta = Path(args["ruta"])
+             ruta.parent.mkdir(parents=True, exist_ok=
+```
