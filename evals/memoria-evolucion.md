@@ -1191,3 +1191,7 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-17 · SIN MUTACIÓN (timeout del mutador)
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
+
+## 2026-11-18 · REPETIDA
+- **Intento:** sin explicación del mutador [solo toca zonas ya agotadas (ejecutar_herramienta)]
+- **Zonas:** ejecutar_herramienta
