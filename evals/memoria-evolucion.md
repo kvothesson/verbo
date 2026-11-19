@@ -1227,3 +1227,7 @@ index bf9514a..b738c96 100644
 ## 2026-11-19 · REPETIDA
 - **Intento:** Esto ataca la causa general de las fallas observadas: escrituras repetidas sin cambios, y código mue [solo toca zonas ya agotadas (ejecutar_herramienta)]
 - **Zonas:** ejecutar_herramienta
+
+## 2026-11-19 · REPETIDA
+- **Intento:** Se mejoró la herramienta **escribir** en `verbo.py` para que, antes de sobrescribir un archivo, veri [solo toca zonas ya agotadas (ejecutar_herramienta)]
+- **Zonas:** ejecutar_herramienta
