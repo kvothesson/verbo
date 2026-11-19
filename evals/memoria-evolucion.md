@@ -1231,3 +1231,6 @@ index bf9514a..b738c96 100644
 ## 2026-11-19 · REPETIDA
 - **Intento:** Se mejoró la herramienta **escribir** en `verbo.py` para que, antes de sobrescribir un archivo, veri [solo toca zonas ya agotadas (ejecutar_herramienta)]
 - **Zonas:** ejecutar_herramienta
+
+## 2026-11-19 · SIN MUTACIÓN
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
