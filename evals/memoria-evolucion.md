@@ -1257,3 +1257,23 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-20 · SIN MUTACIÓN
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
+
+## 2026-11-20 · DESCARTADA EN EL FILTRO
+- **Intento:** Esto rompe el bucle de reescrituras inútiles sin añadir validaciones que nadie pidió, y sirve para c [ganó 0 pares y perdió 0]
+- **Zonas:** GENOMA:herramientas, ejecutar_herramienta
+- **Medición:** aciertos 5/7 → 5/7 · tokens 56148 → 86998
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -131,5 +131,5 @@
+     "herramientas": {
+         "leer": "Lee un archivo de texto y devuelve su contenido con números de línea. En archivos largos la salida se corta: usá 'desde' para leer el resto por partes.",
+-        "escribir": "Crea o sobreescribe un archivo con el contenido dado.",
++        "escribir": "Crea un archivo NUEVO o SOBREESCRIBE uno existente (pierde el contenido anterior). Si el archivo YA TIENE ese contenido exacto, NO lo sobrescribe y avisa: leé antes de volver a tocarlo.",
+         "editar": "Reemplaza un texto exacto (única ocurrencia) dentro de un archivo. Más barato que reescribirlo entero.",
+         "ejecutar": "Ejecuta un comando de shell en el directorio de trabajo y devuelve stdout+stderr y el código de salida.",
+@@ -291,4 +291,8 @@
+             ruta = Path(args["ruta"])
+             ruta.parent.mkdir(parents=True, exist_ok=T
+```
