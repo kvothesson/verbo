@@ -1254,3 +1254,6 @@ index bf9514a..b738c96 100644
          "Reglas:\n"
          + "\n".join(f"{i}. {regla}" for i, regla in enumerate(GENOMA["re
 ```
+
+## 2026-11-20 · SIN MUTACIÓN
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
