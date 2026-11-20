@@ -1281,3 +1281,7 @@ index bf9514a..b738c96 100644
 ## 2026-11-20 · REPETIDA
 - **Intento:** Ahora entiendo el problema. Cuando el modelo hace tool calls inválidos (JSON malformado, herramienta [solo toca zonas ya agotadas (turno)]
 - **Zonas:** turno
+
+## 2026-11-20 · REPETIDA
+- **Intento:** **Mejora aplicada:** Cuando el modelo genera un tool call con JSON malformado (error 400), ahora el  [solo toca zonas ya agotadas (turno)]
+- **Zonas:** turno
