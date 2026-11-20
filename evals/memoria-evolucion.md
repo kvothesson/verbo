@@ -1277,3 +1277,7 @@ index bf9514a..b738c96 100644
              ruta = Path(args["ruta"])
              ruta.parent.mkdir(parents=True, exist_ok=T
 ```
+
+## 2026-11-20 · REPETIDA
+- **Intento:** Ahora entiendo el problema. Cuando el modelo hace tool calls inválidos (JSON malformado, herramienta [solo toca zonas ya agotadas (turno)]
+- **Zonas:** turno
