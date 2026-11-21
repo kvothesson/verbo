@@ -1292,3 +1292,26 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-21 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-21 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 0 pares y perdió 1]
+- **Zonas:** HERRAMIENTAS
+- **Medición:** aciertos 4/7 → 3/7 · tokens 112260 → 65903
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -164,5 +164,5 @@
+         "parameters": {"type": "object", "properties": {
+             "ruta": {"type": "string"},
+-            "contenido": {"type": "string"}},
++            "contenido": {"type": "string", "description": "Contenido del archivo. IMPORTANTE: en el JSON los saltos de línea van como \\n y las comillas como \\\"."}},
+             "required": ["ruta", "contenido"]}}},
+     {"type": "function", "function": {
+@@ -171,6 +171,6 @@
+         "parameters": {"type": "object", "properties": {
+             "ruta": {"type": "string"},
+-            "buscar": {"type": "string", "description": "Texto exacto a encontrar (debe aparecer una sola vez)"},
+-            "reemplazar": {"type": "string"}},
++            "buscar": {"type": "string", "description": "Texto exacto a encontrar (debe aparecer una sola vez). IMPORTANTE: en el JSON los saltos de línea van c
+```
