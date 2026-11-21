@@ -1289,3 +1289,6 @@ index bf9514a..b738c96 100644
 ## 2026-11-21 · REPETIDA
 - **Intento:** Ahora entiendo el problema. En `turno()`, cuando hay un `BadRequestError` por tool call inválido, se [solo toca zonas ya agotadas (ejecutar_herramienta, turno)]
 - **Zonas:** ejecutar_herramienta, turno
+
+## 2026-11-21 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
