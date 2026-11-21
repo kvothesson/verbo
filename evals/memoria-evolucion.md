@@ -1315,3 +1315,21 @@ index bf9514a..b738c96 100644
 -            "reemplazar": {"type": "string"}},
 +            "buscar": {"type": "string", "description": "Texto exacto a encontrar (debe aparecer una sola vez). IMPORTANTE: en el JSON los saltos de línea van c
 ```
+
+## 2026-11-21 · SIN CUPO PARA MEDIR
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [filtro: 57% de pares válidos]
+- **Zonas:** prompt_sistema
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -211,4 +211,9 @@
+         "Reglas:\n"
+         + "\n".join(f"{i}. {regla}" for i, regla in enumerate(GENOMA["reglas"], 1))
++        + "\n\nConsejos prácticos:\n"
++        "• Los argumentos de herramientas deben ser JSON válido: escapá saltos de línea como \\n y comillas como \\\".\n"
++        "• Tras escribir o editar código Python, leé el archivo para verificar que compila (sin IndentationError, etc.).\n"
++        "• Si una herramienta falla, leé el error y cambíá el enfoque; no repitas la misma llamada.\n"
++        "• Para archivos existentes, preferí 'editar' sobre 'escribir'; incluí en 'buscar' el bloque viejo COMPLETO."
+     )
+```
