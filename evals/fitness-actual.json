@@ -126,16 +126,16 @@
  },
  "fallas_recientes": [
   {
-   "tarea": "25-bigcodebench-310",
-   "detalle": "expected_averages)\nAssertionError: Lists differ: [48.3, 174.0, 74.1] != [48.31, 173.982, 74.065]\n\nFirst differing element 0:\n48.3\n48.31\n\n- [48.3, 174.0, 74.1]\n+ [48.31, 173.982, 74.065]\n\n----------------------------------------------------------------------\nRan 5 tests in 0.004s\n\nFAILED (failures=1)",
-   "traza": "→ escribir: solucion.py\n← OK: escrito solucion.py (3951 caracteres)\n→ editar: solucion.py\n← OK: editado solucion.py\n→ editar: solucion.py\n← OK: editado solucion.py\n→ ejecutar: python3 solucion.py\n← [código de salida: 0] (+1 líneas)\n→ leer: people.csv\n← 1\tName,Age,Height,Weight (+101 líneas)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Failed to parse tool call arguments as JSON)]"
+   "tarea": "28-factura-varias-causas",
+   "detalle": "    ^^^^^^^^^^^^^^^^^\nAssertionError: el test sigue fallando: Traceback (most recent call last):\n  File \"/tmp/verbo-eval-28-factura-varias-causas-u9osm3_k/test_factura.py\", line 14, in <module>\n    assert neto_linea(\"tornillo\", 10) == 1187\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError",
+   "traza": "← 1\tclass Pedido: (+8 líneas)\n→ editar: factura.py\n← OK: editado factura.py\n→ ejecutar: python test_factura.py\n← [código de salida: 1] (+5 líneas)\n→ leer: descuentos.py\n← 1\tdef porcentaje_volumen(cantidad): (+6 líneas)\n→ editar: descuentos.py\n← OK: editado descuentos.py\n→ ejecutar: python test_factura.py\n← [código de salida: 1] (+5 líneas)\n→ editar: pedido.py\n← OK: editado pedido.py\n[VERBO alcanzó el máximo de iteraciones para este pedido]"
   },
   {
-   "tarea": "27-edicion-sin-cadaveres",
-   "detalle": "st recent call last):\n  File \"/home/runner/work/verbo/verbo/evals/tareas/27-edicion-sin-cadaveres/verificar.py\", line 11, in <module>\n    assert str(p.imagen()) != antes, \"rotar() no cambia la imagen (pieza I)\"\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: rotar() no cambia la imagen (pieza I)",
-   "traza": "← ERROR: el texto aparece 2 veces. Agregá más contexto para que sea único.\n→ leer: juego.py\n← 18\t    def rotar(self): (+2 líneas)\n→ leer: juego.py\n← 18\t    def rotar(self): (+2 líneas)\n→ editar: juego.py\n← ERROR: el texto a buscar no aparece en el archivo. Leé el archivo y usá el texto exacto.\n→ leer: juego.py\n← 18\t    def rotar(self): (+2 líneas)\n→ editar: juego.py\n← ERROR: el texto aparece 2 veces. Agregá más contexto para que sea único.\n→ leer: juego.py\n← 18\t    def rotar(self): (+2 líneas)\n[VERBO alcanzó el máximo de iteraciones para este pedido]"
+   "tarea": "29-config-con-herencia",
+   "detalle": "[timeout del agente]",
+   "traza": "→ ejecutar: rm -f solucion.py && python3 -c \"\n← [código de salida: 2] (+1 líneas)\n→ ejecutar: rm -f solucion.py && python3 << 'EOF'\n← [código de salida: 1] (+4 líneas)\n→ ejecutar: rm -f solucion.py && python3 << 'PYEOF'\n← [código de salida: 1] (+4 líneas)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Parsing failed. The model generated output that could not be parsed. Please adjust your prompt\n→ leer: solucion.py\n← ERROR: no existe el archivo solucion.py\n→ escribir: solucion.py\n← OK: escrito solucion.py (3745 caracteres)\n[tool call inválido del modelo; corrigiendo... (Error code: 400 - Failed to parse tool call arguments as JSON)]\n→ leer: solucion.py\n← 1\timport re (+108 líneas)"
   }
  ],
  "medido": "2026-10-30",
- "fallas_recientes_medidas": "2026-11-21"
+ "fallas_recientes_medidas": "2026-11-22"
 }

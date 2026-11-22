@@ -1333,3 +1333,20 @@ index bf9514a..b738c96 100644
 +        "• Para archivos existentes, preferí 'editar' sobre 'escribir'; incluí en 'buscar' el bloque viejo COMPLETO."
      )
 ```
+
+## 2026-11-22 · DESCARTADA EN EL FILTRO
+- **Intento:** Listo. Agregué un mensaje de **cierre** que se envía automáticamente cuando el modelo cree que termi [ganó 0 pares y perdió 1]
+- **Zonas:** GENOMA:cierre
+- **Medición:** aciertos 5/7 → 4/7 · tokens 73364 → 100978
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -142,5 +142,5 @@
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+-    "cierre": "",
++    "cierre": "Antes de cerrar: ¿leíste el archivo antes de editar? ¿El 'buscar' incluye el bloque viejo COMPLETO (con sangría y líneas vecinas) para que sea único? ¿Los strings JSON de tool calls escapan saltos de línea como \\n y comillas como \\\"? Si no, corregí y reintentá.",
+ }
+ # <<< GENOMA
+```
