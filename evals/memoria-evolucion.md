@@ -1350,3 +1350,6 @@ index bf9514a..b738c96 100644
  }
  # <<< GENOMA
 ```
+
+## 2026-11-22 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
