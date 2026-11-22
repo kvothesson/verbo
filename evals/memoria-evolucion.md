@@ -1356,3 +1356,18 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-22 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-22 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 1 pares y perdió 2]
+- **Zonas:** prompt_sistema
+- **Medición:** aciertos 4/6 → 3/6 · tokens 100480 → 110717
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -211,4 +211,5 @@
+         "Reglas:\n"
+         + "\n".join(f"{i}. {regla}" for i, regla in enumerate(GENOMA["reglas"], 1))
++        + "\n\nImportante: en los tool calls, los strings JSON deben escapar saltos de línea como \\n y comillas como \\\"."
+     )
+```
