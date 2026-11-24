@@ -1401,3 +1401,25 @@ index bf9514a..b738c96 100644
 ## 2026-11-24 · REPETIDA
 - **Intento:** Se simplificó la condición de guardia que verifica si una edición de Python rompería la sintaxis: ah [solo toca zonas ya agotadas (ejecutar_herramienta)]
 - **Zonas:** ejecutar_herramienta
+
+## 2026-11-24 · DESCARTADA EN EL FILTRO
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente] [ganó 1 pares y perdió 1]
+- **Zonas:** HERRAMIENTAS
+- **Medición:** aciertos 4/7 → 4/7 · tokens 147000 → 73344
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -155,5 +155,5 @@
+         "description": GENOMA["herramientas"]["leer"],
+         "parameters": {"type": "object", "properties": {
+-            "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"},
++            "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta. En el JSON, escapá saltos de línea como \\n y comillas como \\\"."},
+             "desde": {"type": "integer", "description": "Opcional: primera línea a leer (1 = principio)"},
+             "hasta": {"type": "integer", "description": "Opcional: última línea a leer"}},
+@@ -164,5 +164,5 @@
+         "parameters": {"type": "object", "properties": {
+             "ruta": {"type": "string"},
+-            "contenido": {"type": "string"}},
++            "contenido": {"type": "string", "description": "Contenido del archivo. En el JSON, escapá saltos
+```
