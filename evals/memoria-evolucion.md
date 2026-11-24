@@ -1397,3 +1397,7 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-24 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-24 · REPETIDA
+- **Intento:** Se simplificó la condición de guardia que verifica si una edición de Python rompería la sintaxis: ah [solo toca zonas ya agotadas (ejecutar_herramienta)]
+- **Zonas:** ejecutar_herramienta
