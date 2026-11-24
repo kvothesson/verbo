@@ -1374,3 +1374,6 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-24 · SIN MUTACIÓN
 - **Intento:** (sin respuesta)
+
+## 2026-11-24 · SIN MUTACIÓN
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
