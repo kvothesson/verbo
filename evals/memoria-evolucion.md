@@ -1371,3 +1371,6 @@ index bf9514a..b738c96 100644
 +        + "\n\nImportante: en los tool calls, los strings JSON deben escapar saltos de línea como \\n y comillas como \\\"."
      )
 ```
+
+## 2026-11-24 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
