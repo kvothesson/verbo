@@ -1377,3 +1377,20 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-24 · SIN MUTACIÓN
 - **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
+
+## 2026-11-24 · DESCARTADA EN EL FILTRO
+- **Intento:** Listo. Agregué un mensaje de **cierre** que se envía automáticamente cuando el modelo cree que termi [ganó 1 pares y perdió 1]
+- **Zonas:** GENOMA:cierre
+- **Medición:** aciertos 5/7 → 5/7 · tokens 85521 → 141635
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -142,5 +142,5 @@
+     # Si no está vacío, se le manda al modelo la primera vez que quiere dar la
+     # tarea por terminada, y tiene una vuelta más para verificar o corregir.
+-    "cierre": "",
++    "cierre": "Antes de terminar: ejecutá los tests del proyecto (pytest, python -m unittest, make test, etc.) para confirmar que tu solución pasa todos los tests. Si no hay tests, corré tu código con casos de borde.",
+ }
+ # <<< GENOMA
+```
