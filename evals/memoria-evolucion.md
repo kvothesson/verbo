@@ -1423,3 +1423,6 @@ index bf9514a..b738c96 100644
 -            "contenido": {"type": "string"}},
 +            "contenido": {"type": "string", "description": "Contenido del archivo. En el JSON, escapá saltos
 ```
+
+## 2026-11-24 · SIN MUTACIÓN
+- **Intento:** (sin respuesta)
