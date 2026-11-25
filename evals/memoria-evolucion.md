@@ -1434,3 +1434,20 @@ index bf9514a..b738c96 100644
 ## 2026-11-25 · REPETIDA
 - **Intento:** El cambio elimina el mensaje del assistant que contenía la llamada a herramienta inválida antes de e [solo toca zonas ya agotadas (turno)]
 - **Zonas:** turno
+
+## 2026-11-25 · DESCARTADA EN EL FILTRO
+- **Intento:** **Mejora aplicada:** Cambié `truncar()` para que conserve el **final** del texto en lugar del princi [ganó 0 pares y perdió 0]
+- **Zonas:** truncar
+- **Medición:** aciertos 5/7 → 5/7 · tokens 94070 → 134533
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -217,5 +217,7 @@
+     if len(texto) <= limite:
+         return texto
+-    return texto[:limite] + f"\n[... truncado: {len(texto) - limite} caracteres más]"
++    # Mantener el FINAL del texto (donde están los errores/resultados recientes)
++    # en vez del principio. Crítico para 'ejecutar': el traceback queda al final.
++    return f"[... truncado: {len(texto) - limite} caracteres al inicio ...]\n" + texto[-limite:]
+```
