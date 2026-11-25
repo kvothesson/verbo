@@ -1430,3 +1430,7 @@ index bf9514a..b738c96 100644
 ## 2026-11-24 · REPETIDA
 - **Intento:** Analizando las fallas: el agente se queda en bucles (máximo de iteraciones en [28], timeout en [29]) [solo toca zonas ya agotadas (turno)]
 - **Zonas:** turno
+
+## 2026-11-25 · REPETIDA
+- **Intento:** El cambio elimina el mensaje del assistant que contenía la llamada a herramienta inválida antes de e [solo toca zonas ya agotadas (turno)]
+- **Zonas:** turno
