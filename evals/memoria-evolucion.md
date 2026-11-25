@@ -1451,3 +1451,6 @@ index bf9514a..b738c96 100644
 +    # en vez del principio. Crítico para 'ejecutar': el traceback queda al final.
 +    return f"[... truncado: {len(texto) - limite} caracteres al inicio ...]\n" + texto[-limite:]
 ```
+
+## 2026-11-25 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: TypeError: 'NoneType' object is not subscriptable
