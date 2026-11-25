@@ -1454,3 +1454,6 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-25 · FALLÓ EL MUTADOR
 - **Intento:** exit 1: TypeError: 'NoneType' object is not subscriptable
+
+## 2026-11-25 · FALLÓ EL MUTADOR
+- **Intento:** exit 1: TypeError: 'NoneType' object is not subscriptable
