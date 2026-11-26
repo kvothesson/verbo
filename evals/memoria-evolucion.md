@@ -1457,3 +1457,32 @@ index bf9514a..b738c96 100644
 
 ## 2026-11-25 · FALLÓ EL MUTADOR
 - **Intento:** exit 1: TypeError: 'NoneType' object is not subscriptable
+
+## 2026-11-26 · DESCARTADA EN EL FILTRO
+- **Intento:** Eliminé las descripciones heredadas de `GENOMA["herramientas"]` en la definición de `HERRAMIENTAS` y [ganó 0 pares y perdió 1]
+- **Zonas:** HERRAMIENTAS
+- **Medición:** aciertos 5/7 → 4/7 · tokens 105452 → 65080
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -153,5 +153,5 @@
+     {"type": "function", "function": {
+         "name": "leer",
+-        "description": GENOMA["herramientas"]["leer"],
++        "description": "En el JSON, escapá saltos de línea como \n y comillas como \".",
+         "parameters": {"type": "object", "properties": {
+             "ruta": {"type": "string", "description": "Ruta del archivo, relativa o absoluta"},
+@@ -161,5 +161,5 @@
+     {"type": "function", "function": {
+         "name": "escribir",
+-        "description": GENOMA["herramientas"]["escribir"],
++        "description": "En el JSON, escapá saltos de línea como \n y comillas como \".",
+         "parameters": {"type": "object", "properties": {
+             "ruta": {"type": "string"},
+@@ -168,5 +168,5 @@
+     {"type": "function", "function": {
+         "name": "editar",
+-        "description": GENOMA["herramientas"]["editar"],
++
+```
