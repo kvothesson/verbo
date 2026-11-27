@@ -1502,3 +1502,6 @@ index bf9514a..b738c96 100644
 +    return f"[... truncado: {len(texto) - limite} caracteres al inicio ...]\n" + texto[-limite:]
 +
 ```
+
+## 2026-11-27 · SIN MUTACIÓN (timeout del mutador)
+- **Intento:** [groq/qwen/qwen3.8-27b rechazó la llamada (413); probando el siguiente]
