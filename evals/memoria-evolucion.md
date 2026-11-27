@@ -1486,3 +1486,19 @@ index bf9514a..b738c96 100644
 -        "description": GENOMA["herramientas"]["editar"],
 +
 ```
+
+## 2026-11-27 · SIN CUPO PARA MEDIR
+- **Intento:** La función `truncar` ahora conserva el **final** del texto (donde están los errores/resultados recie [suite: 62% de pares válidos]
+- **Zonas:** truncar
+- **Medición:** aciertos 7/8 → 7/8 · tokens 105642 → 118216
+- **Diff:**
+```diff
+--- a/verbo.py
++++ b/verbo.py
+@@ -217,5 +217,6 @@
+     if len(texto) <= limite:
+         return texto
+-    return texto[:limite] + f"\n[... truncado: {len(texto) - limite} caracteres más]"
++    return f"[... truncado: {len(texto) - limite} caracteres al inicio ...]\n" + texto[-limite:]
++
+```
